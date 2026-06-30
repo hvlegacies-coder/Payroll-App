@@ -1,0 +1,1 @@
+UPDATE public.preparer_users SET user_id = '5c15fbbc-a8be-4288-82a9-82b148db6925' WHERE ptin = 'P02501354';

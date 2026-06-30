@@ -1,0 +1,1 @@
+ALTER TABLE public.offices ADD COLUMN process_preparers_share boolean NOT NULL DEFAULT false;

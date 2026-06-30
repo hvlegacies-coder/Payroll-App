@@ -1,0 +1,1 @@
+DROP POLICY IF EXISTS "Users can insert own preparer link" ON public.preparer_users;

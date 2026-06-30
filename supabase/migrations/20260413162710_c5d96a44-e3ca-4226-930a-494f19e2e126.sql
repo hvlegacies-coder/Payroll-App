@@ -1,0 +1,1 @@
+ALTER TABLE public.offices ADD COLUMN default_preparers_share text NOT NULL DEFAULT '';

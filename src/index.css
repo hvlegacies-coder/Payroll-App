@@ -1,0 +1,155 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 43 20% 96%;
+    --foreground: 40 10% 10%;
+    --card: 0 0% 100%;
+    --card-foreground: 40 10% 10%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 40 10% 10%;
+    --primary: 43 85% 45%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 43 15% 92%;
+    --secondary-foreground: 40 10% 10%;
+    --muted: 43 15% 92%;
+    --muted-foreground: 40 10% 40%;
+    --accent: 43 15% 92%;
+    --accent-foreground: 40 10% 10%;
+    --destructive: 0 72% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 43 15% 85%;
+    --input: 43 15% 85%;
+    --ring: 43 85% 45%;
+    --radius: 0.75rem;
+    --status-positive: 142 72% 37%;
+    --status-positive-bg: 142 72% 93%;
+    --status-negative: 0 72% 50%;
+    --status-negative-bg: 0 72% 95%;
+    --status-warning: 38 92% 50%;
+    --status-warning-bg: 38 92% 93%;
+    --status-info: 43 85% 45%;
+    --status-info-bg: 43 85% 93%;
+    --surface-ash: 43 15% 95%;
+    --surface-elevated: 0 0% 100%;
+    --sidebar-background: 40 6% 8%;
+    --sidebar-foreground: 43 20% 75%;
+    --sidebar-primary: 43 85% 55%;
+    --sidebar-primary-foreground: 40 10% 5%;
+    --sidebar-accent: 43 20% 14%;
+    --sidebar-accent-foreground: 43 85% 65%;
+    --sidebar-border: 40 8% 16%;
+    --sidebar-ring: 43 85% 55%;
+    --sidebar-muted: 40 10% 40%;
+    --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+    --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+    --shadow-sm: 0 1px 2px 0 hsl(40 10% 10% / 0.05);
+    --shadow-md: 0 4px 6px -1px hsl(40 10% 10% / 0.07), 0 2px 4px -2px hsl(40 10% 10% / 0.05);
+    --shadow-lg: 0 10px 25px -3px hsl(40 10% 10% / 0.1), 0 4px 6px -4px hsl(40 10% 10% / 0.05);
+    --shadow-card: 0 1px 3px 0 hsl(40 10% 10% / 0.06), 0 1px 2px -1px hsl(40 10% 10% / 0.04);
+  }
+
+  .dark {
+    --background: 40 6% 5%;
+    --foreground: 43 30% 92%;
+    --card: 40 6% 8%;
+    --card-foreground: 43 30% 92%;
+    --popover: 40 6% 8%;
+    --popover-foreground: 43 30% 92%;
+    --primary: 43 85% 58%;
+    --primary-foreground: 40 10% 5%;
+    --secondary: 40 8% 12%;
+    --secondary-foreground: 43 30% 92%;
+    --muted: 40 8% 12%;
+    --muted-foreground: 40 10% 45%;
+    --accent: 40 8% 12%;
+    --accent-foreground: 43 30% 92%;
+    --destructive: 0 72% 55%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 40 8% 15%;
+    --input: 40 8% 15%;
+    --ring: 43 85% 58%;
+    --status-positive: 142 72% 45%;
+    --status-positive-bg: 142 72% 10%;
+    --status-negative: 0 72% 55%;
+    --status-negative-bg: 0 72% 10%;
+    --status-warning: 38 92% 55%;
+    --status-warning-bg: 38 92% 10%;
+    --status-info: 43 85% 58%;
+    --status-info-bg: 43 85% 10%;
+    --surface-ash: 40 6% 3%;
+    --surface-elevated: 40 6% 10%;
+    --sidebar-background: 40 6% 3%;
+    --sidebar-foreground: 43 20% 70%;
+    --sidebar-primary: 43 85% 58%;
+    --sidebar-primary-foreground: 40 10% 5%;
+    --sidebar-accent: 43 20% 10%;
+    --sidebar-accent-foreground: 43 85% 68%;
+    --sidebar-border: 40 8% 12%;
+    --sidebar-ring: 43 85% 58%;
+    --sidebar-muted: 40 10% 38%;
+    --shadow-sm: 0 1px 2px 0 hsl(0 0% 0% / 0.4);
+    --shadow-md: 0 4px 6px -1px hsl(0 0% 0% / 0.5), 0 2px 4px -2px hsl(0 0% 0% / 0.3);
+    --shadow-lg: 0 10px 25px -3px hsl(0 0% 0% / 0.6), 0 4px 6px -4px hsl(0 0% 0% / 0.3);
+    --shadow-card: 0 1px 3px 0 hsl(0 0% 0% / 0.4), 0 1px 2px -1px hsl(0 0% 0% / 0.25);
+  }
+}
+
+@layer base {
+  * { @apply border-border; }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    font-feature-settings: "zero" 0, "ss01" 0, "ss02" 0;
+  }
+  h1, h2, h3, h4, h5, h6 { @apply font-semibold tracking-tight text-foreground; }
+}
+
+@layer components {
+  .font-data {
+    font-family: var(--font-mono);
+    font-feature-settings: "tnum" 1, "zero" 0, "ss01" 0, "ss02" 0;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: hsl(var(--muted-foreground) / 0.3); }
+
+.login-page { background: linear-gradient(135deg, hsl(40 8% 4%) 0%, hsl(40 10% 8%) 50%, hsl(40 8% 5%) 100%); }
+.login-bg-gradient { position: absolute; inset: 0; background: radial-gradient(ellipse 600px 400px at 30% 20%, hsl(43 85% 55% / 0.05) 0%, transparent 70%), radial-gradient(ellipse 500px 500px at 70% 80%, hsl(43 60% 40% / 0.04) 0%, transparent 70%); }
+.login-particles { position: absolute; inset: 0; pointer-events: none; }
+.login-particle { position: absolute; width: 3px; height: 3px; border-radius: 50%; background: hsl(43 85% 55% / 0.3); animation: particleFloat linear infinite; }
+@keyframes particleFloat { 0%, 100% { transform: translateY(0) scale(1); opacity: 0; } 10% { opacity: 1; } 90% { opacity: 1; } 50% { transform: translateY(-60px) scale(1.5); } }
+.login-card { background: hsl(40 8% 7% / 0.9); border: 1px solid hsl(43 85% 55% / 0.2); box-shadow: 0 0 40px hsl(43 85% 55% / 0.06), 0 0 80px hsl(43 85% 55% / 0.03), 0 25px 60px hsl(0 0% 0% / 0.5); backdrop-filter: blur(20px); }
+.login-card--off { border-color: hsl(40 10% 20% / 0.3); box-shadow: 0 0 10px hsl(40 10% 20% / 0.1), 0 25px 60px hsl(0 0% 0% / 0.5); }
+.login-card-left { background: hsl(40 8% 5% / 0.6); border-right: 1px solid hsl(40 10% 20% / 0.4); }
+.login-input { background: hsl(40 8% 10%); border: 1px solid hsl(40 10% 20%); color: hsl(0 0% 90%); box-shadow: inset 0 2px 4px hsl(0 0% 0% / 0.2); outline: none; transition: border-color 0.2s, box-shadow 0.2s; }
+.login-input::placeholder { color: hsl(40 10% 35%); }
+.login-input:focus { border-color: hsl(43 85% 55% / 0.6); box-shadow: inset 0 2px 4px hsl(0 0% 0% / 0.2), 0 0 0 3px hsl(43 85% 55% / 0.1); }
+.login-btn { background: linear-gradient(135deg, hsl(43 85% 45%) 0%, hsl(43 60% 35%) 100%); color: hsl(0 0% 100%); box-shadow: 0 0 20px hsl(43 85% 55% / 0.25); border: none; }
+.login-btn:hover:not(:disabled) { box-shadow: 0 0 30px hsl(43 85% 55% / 0.4); transform: translateY(-1px); }
+.login-btn:disabled { opacity: 0.7; }
+.login-btn-gold { background: linear-gradient(135deg, hsl(43 85% 50%) 0%, hsl(43 70% 40%) 100%); color: hsl(40 10% 5%); font-weight: 600; box-shadow: 0 0 20px hsl(43 85% 55% / 0.2); border: none; }
+.login-btn-gold:hover:not(:disabled) { box-shadow: 0 0 30px hsl(43 85% 55% / 0.4); transform: translateY(-1px); }
+.login-btn-gold:disabled { opacity: 0.7; }
+@keyframes loginEntrance { from { opacity: 0; transform: translateY(30px) scale(0.96); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-12px); } }
+
+/* King J Login Theme — Green & Gold */
+.kj-login-page { background: linear-gradient(135deg, hsl(140 10% 4%) 0%, hsl(140 12% 7%) 50%, hsl(130 8% 5%) 100%); }
+.kj-login-bg-gradient { position: absolute; inset: 0; background: radial-gradient(ellipse 600px 400px at 30% 20%, hsl(130 60% 40% / 0.06) 0%, transparent 70%), radial-gradient(ellipse 500px 500px at 70% 80%, hsl(45 80% 50% / 0.04) 0%, transparent 70%); }
+.kj-login-particle { position: absolute; width: 3px; height: 3px; border-radius: 50%; background: hsl(130 60% 45% / 0.35); animation: particleFloat linear infinite; }
+.kj-login-card { background: hsl(140 10% 6% / 0.92); border: 1px solid hsl(130 60% 40% / 0.25); box-shadow: 0 0 40px hsl(130 60% 40% / 0.06), 0 0 80px hsl(45 80% 50% / 0.03), 0 25px 60px hsl(0 0% 0% / 0.5); backdrop-filter: blur(20px); }
+.kj-login-input { background: hsl(140 10% 9%); border: 1px solid hsl(130 20% 20%); color: hsl(0 0% 90%); box-shadow: inset 0 2px 4px hsl(0 0% 0% / 0.2); outline: none; transition: border-color 0.2s, box-shadow 0.2s; }
+.kj-login-input::placeholder { color: hsl(130 10% 35%); }
+.kj-login-input:focus { border-color: hsl(130 60% 45% / 0.6); box-shadow: inset 0 2px 4px hsl(0 0% 0% / 0.2), 0 0 0 3px hsl(130 60% 45% / 0.12); }
+.kj-login-btn { background: linear-gradient(135deg, hsl(45 80% 50%) 0%, hsl(130 60% 38%) 100%); color: hsl(0 0% 5%); font-weight: 600; box-shadow: 0 0 20px hsl(130 60% 40% / 0.2); border: none; }
+.kj-login-btn:hover:not(:disabled) { box-shadow: 0 0 30px hsl(130 60% 40% / 0.35); transform: translateY(-1px); }
+.kj-login-btn:disabled { opacity: 0.7; }

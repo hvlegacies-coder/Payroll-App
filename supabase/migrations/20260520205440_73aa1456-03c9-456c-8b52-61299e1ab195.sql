@@ -1,0 +1,1 @@
+ALTER TABLE public.client_overrides ADD COLUMN IF NOT EXISTS location_name text NOT NULL DEFAULT '';

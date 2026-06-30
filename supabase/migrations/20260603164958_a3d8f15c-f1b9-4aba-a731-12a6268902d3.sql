@@ -1,0 +1,1 @@
+ALTER TABLE public.offices ADD COLUMN IF NOT EXISTS extra_efins text[] NOT NULL DEFAULT '{}';

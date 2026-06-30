@@ -1,0 +1,1 @@
+CREATE TABLE public.notes (id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY, user_id UUID REFERENCES auth.users NOT NULL, title TEXT NOT NULL, content TEXT, created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(), updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now())

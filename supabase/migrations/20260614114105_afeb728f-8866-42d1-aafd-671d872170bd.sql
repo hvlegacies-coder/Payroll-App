@@ -1,0 +1,1 @@
+CREATE POLICY "Admins can read email attachments" ON storage.objects FOR SELECT TO authenticated USING (bucket_id = 'email-attachments' AND public.has_role(auth.uid(), 'admin'));
