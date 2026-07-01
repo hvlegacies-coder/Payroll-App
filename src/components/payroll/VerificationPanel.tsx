@@ -2,15 +2,29 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import {
   ShieldCheck, Loader2, CheckCircle2, AlertTriangle, XCircle, Info,
-  ChevronDown, ChevronRight, ArrowRight, RefreshCw,
+  ChevronDown, ChevronRight, ArrowRight, RefreshCw, Wrench, Plus,
 } from 'lucide-react';
-import { runPayrollVerification, type VerificationReport, type VerificationCheck } from '@/services/payrollVerification';
+import { supabase } from '@/integrations/supabase/client';
+import {
+  runPayrollVerification,
+  type VerificationReport,
+  type VerificationCheck,
+  type PrepToAdd,
+  type PrepToFix,
+} from '@/services/payrollVerification';
 
 // ── Check Card ───────────────────────────────────────────────────────────────
 
-function CheckCard({ check }: { check: VerificationCheck }) {
+function CheckCard({
+  check,
+  resolveButton,
+}: {
+  check: VerificationCheck;
+  resolveButton?: React.ReactNode;
+}) {
   const [expanded, setExpanded] = useState(false);
 
   const iconMap = {
@@ -54,7 +68,8 @@ function CheckCard({ check }: { check: VerificationCheck }) {
           </div>
           <p className="text-xs text-muted-foreground mt-0.5 leading-snug">{check.description}</p>
         </div>
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
+          {resolveButton}
           {check.fixPath && check.fixLabel && (
             <Link to={check.fixPath}>
               <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 text-primary">
@@ -86,32 +101,13 @@ function CheckCard({ check }: { check: VerificationCheck }) {
   );
 }
 
-// ── Category Section ──────────────────────────────────────────────────────────
+// ── Category Labels ───────────────────────────────────────────────────────────
 
 const CATEGORY_LABELS: Record<string, string> = {
   uploads: 'File Uploads',
   preparer_matching: 'Preparer Matching',
   data_quality: 'Data Quality',
 };
-
-function CategorySection({ category, checks }: { category: string; checks: VerificationCheck[] }) {
-  const issues = checks.filter(c => c.status === 'fail' || c.status === 'warn');
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center gap-2">
-        <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          {CATEGORY_LABELS[category] ?? category}
-        </h4>
-        {issues.length > 0 && (
-          <Badge variant="outline" className="text-[10px] px-1.5 py-0">{issues.length} issue{issues.length > 1 ? 's' : ''}</Badge>
-        )}
-      </div>
-      <div className="space-y-2">
-        {checks.map(c => <CheckCard key={c.id} check={c} />)}
-      </div>
-    </div>
-  );
-}
 
 // ── Verification Panel ────────────────────────────────────────────────────────
 
@@ -124,10 +120,19 @@ export function VerificationPanel({ weekLabel }: Props) {
   const [running, setRunning] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
 
+  // resolve state
+  const [resolveOpen, setResolveOpen] = useState<string | null>(null);
+  const [resolving, setResolving] = useState<string | null>(null);
+  const [resolveError, setResolveError] = useState<string | null>(null);
+  const [shareValues, setShareValues] = useState<Record<string, string>>({});
+  const [officeValues, setOfficeValues] = useState<Record<string, string>>({});
+
   const runVerification = async () => {
     if (!weekLabel) return;
     setRunning(true);
     setRunError(null);
+    setResolveOpen(null);
+    setResolveError(null);
     try {
       const result = await runPayrollVerification(weekLabel);
       setReport(result);
@@ -137,6 +142,199 @@ export function VerificationPanel({ weekLabel }: Props) {
       setRunning(false);
     }
   };
+
+  // ── Auto-fix handlers ─────────────────────────────────────────────────────
+
+  const handleAddPreparers = async (check: VerificationCheck) => {
+    const data = check.resolveData as PrepToAdd[];
+    if (!data?.length) return;
+    setResolving(check.id);
+    setResolveError(null);
+    try {
+      const rows = data.map(p => ({
+        ptin: p.ptin.toUpperCase(),
+        contractor: p.contractor,
+        share_percent: 0,
+        tax_office: '',
+        active: true,
+      }));
+      const { error } = await (supabase as any).from('preparers').upsert(rows, { onConflict: 'ptin', ignoreDuplicates: true });
+      if (error) throw error;
+      await runVerification();
+    } catch (err: any) {
+      setResolveError(err?.message ?? 'Failed to add preparers.');
+      setResolving(null);
+    }
+  };
+
+  const handleSetShare = async (check: VerificationCheck) => {
+    const data = check.resolveData as PrepToFix[];
+    if (!data?.length) return;
+    setResolving(check.id);
+    setResolveError(null);
+    try {
+      for (const p of data) {
+        const val = parseFloat(shareValues[p.ptin] ?? '0') || 0;
+        const { error } = await (supabase as any)
+          .from('preparers')
+          .update({ share_percent: val })
+          .eq('ptin', p.ptin.toUpperCase());
+        if (error) throw error;
+      }
+      setShareValues({});
+      await runVerification();
+    } catch (err: any) {
+      setResolveError(err?.message ?? 'Failed to update share percentages.');
+      setResolving(null);
+    }
+  };
+
+  const handleSetOffice = async (check: VerificationCheck) => {
+    const data = check.resolveData as PrepToFix[];
+    if (!data?.length) return;
+    const filled = data.filter(p => (officeValues[p.ptin] ?? '').trim());
+    if (!filled.length) {
+      setResolveError('Enter an office name for at least one preparer.');
+      return;
+    }
+    setResolving(check.id);
+    setResolveError(null);
+    try {
+      for (const p of filled) {
+        const val = officeValues[p.ptin].trim();
+        const { error } = await (supabase as any)
+          .from('preparers')
+          .update({ tax_office: val })
+          .eq('ptin', p.ptin.toUpperCase());
+        if (error) throw error;
+      }
+      setOfficeValues({});
+      await runVerification();
+    } catch (err: any) {
+      setResolveError(err?.message ?? 'Failed to update offices.');
+      setResolving(null);
+    }
+  };
+
+  // ── Resolve UI builders ───────────────────────────────────────────────────
+
+  const getResolveButton = (check: VerificationCheck): React.ReactNode | undefined => {
+    if (check.status === 'pass' || check.status === 'skip') return undefined;
+    if (!check.resolveType) return undefined;
+    const isResolving = resolving === check.id;
+
+    if (check.resolveType === 'add_preparers') {
+      const data = check.resolveData as PrepToAdd[];
+      return (
+        <Button
+          size="sm"
+          className="h-7 text-xs gap-1"
+          disabled={isResolving}
+          onClick={() => handleAddPreparers(check)}
+        >
+          {isResolving
+            ? <><Loader2 className="h-3 w-3 animate-spin" /> Adding…</>
+            : <><Plus className="h-3 w-3" /> Auto-Add {data?.length ?? 0}</>
+          }
+        </Button>
+      );
+    }
+
+    const isOpen = resolveOpen === check.id;
+    return (
+      <Button
+        variant="outline"
+        size="sm"
+        className="h-7 text-xs gap-1"
+        onClick={() => setResolveOpen(isOpen ? null : check.id)}
+      >
+        <Wrench className="h-3 w-3" />
+        {isOpen ? 'Close Fix' : 'Quick Fix'}
+      </Button>
+    );
+  };
+
+  const getResolveForm = (check: VerificationCheck): React.ReactNode | null => {
+    if (resolveOpen !== check.id) return null;
+    if (check.status === 'pass' || check.status === 'skip') return null;
+    const isResolving = resolving === check.id;
+
+    if (check.resolveType === 'set_share') {
+      const data = check.resolveData as PrepToFix[];
+      return (
+        <div className="ml-8 p-3 rounded-md border border-border bg-muted/30 space-y-3">
+          <p className="text-xs font-medium text-muted-foreground">Set Share % for Each Preparer</p>
+          {data.map(p => (
+            <div key={p.ptin} className="flex items-center gap-2">
+              <span className="text-xs flex-1 truncate">
+                {p.contractor} <span className="text-muted-foreground">({p.ptin})</span>
+              </span>
+              <div className="flex items-center gap-1 shrink-0">
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  placeholder="0"
+                  className="h-7 w-20 text-xs text-right"
+                  value={shareValues[p.ptin] ?? ''}
+                  onChange={e => setShareValues(prev => ({ ...prev, [p.ptin]: e.target.value }))}
+                />
+                <span className="text-xs text-muted-foreground">%</span>
+              </div>
+            </div>
+          ))}
+          <Button
+            size="sm"
+            className="h-7 text-xs gap-1.5"
+            disabled={isResolving}
+            onClick={() => handleSetShare(check)}
+          >
+            {isResolving
+              ? <><Loader2 className="h-3 w-3 animate-spin" /> Saving…</>
+              : 'Save & Re-Verify'
+            }
+          </Button>
+        </div>
+      );
+    }
+
+    if (check.resolveType === 'set_office') {
+      const data = check.resolveData as PrepToFix[];
+      return (
+        <div className="ml-8 p-3 rounded-md border border-border bg-muted/30 space-y-3">
+          <p className="text-xs font-medium text-muted-foreground">Assign Tax Office</p>
+          {data.map(p => (
+            <div key={p.ptin} className="flex items-center gap-2">
+              <span className="text-xs flex-1 truncate">
+                {p.contractor} <span className="text-muted-foreground">({p.ptin})</span>
+              </span>
+              <Input
+                placeholder="e.g. Higher View"
+                className="h-7 w-40 text-xs shrink-0"
+                value={officeValues[p.ptin] ?? ''}
+                onChange={e => setOfficeValues(prev => ({ ...prev, [p.ptin]: e.target.value }))}
+              />
+            </div>
+          ))}
+          <Button
+            size="sm"
+            className="h-7 text-xs gap-1.5"
+            disabled={isResolving}
+            onClick={() => handleSetOffice(check)}
+          >
+            {isResolving
+              ? <><Loader2 className="h-3 w-3 animate-spin" /> Saving…</>
+              : 'Save & Re-Verify'
+            }
+          </Button>
+        </div>
+      );
+    }
+
+    return null;
+  };
+
+  // ── Render ────────────────────────────────────────────────────────────────
 
   if (!weekLabel) {
     return (
@@ -148,13 +346,7 @@ export function VerificationPanel({ weekLabel }: Props) {
     );
   }
 
-  // Group checks by category (in display order)
   const categories = ['uploads', 'preparer_matching', 'data_quality'];
-  const grouped = categories.map(cat => ({
-    category: cat,
-    checks: (report?.checks ?? []).filter(c => c.category === cat),
-  }));
-
   const hasErrors = (report?.errorCount ?? 0) > 0;
   const hasWarnings = (report?.warningCount ?? 0) > 0;
 
@@ -209,7 +401,7 @@ export function VerificationPanel({ weekLabel }: Props) {
         </div>
       )}
 
-      {/* Error */}
+      {/* Scan error */}
       {runError && (
         <div className="flex items-start gap-3 p-4 rounded-lg border border-destructive/40 bg-destructive/5">
           <XCircle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
@@ -217,6 +409,14 @@ export function VerificationPanel({ weekLabel }: Props) {
             <p className="text-sm font-medium text-destructive">Verification failed</p>
             <p className="text-xs text-muted-foreground mt-0.5">{runError}</p>
           </div>
+        </div>
+      )}
+
+      {/* Resolve error */}
+      {resolveError && !running && (
+        <div className="flex items-start gap-3 p-3 rounded-lg border border-destructive/30 bg-destructive/5">
+          <XCircle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
+          <p className="text-xs text-destructive">{resolveError}</p>
         </div>
       )}
 
@@ -252,7 +452,6 @@ export function VerificationPanel({ weekLabel }: Props) {
               </p>
             </div>
 
-            {/* KPI badges */}
             <div className="flex gap-1.5 shrink-0 flex-wrap justify-end">
               {report.errorCount > 0 && (
                 <Badge variant="destructive" className="text-[10px]">
@@ -274,11 +473,33 @@ export function VerificationPanel({ weekLabel }: Props) {
 
           {/* Check categories */}
           <div className="space-y-6">
-            {grouped.map(({ category, checks }) =>
-              checks.length > 0 ? (
-                <CategorySection key={category} category={category} checks={checks} />
-              ) : null
-            )}
+            {categories.map(cat => {
+              const catChecks = report.checks.filter(c => c.category === cat);
+              if (catChecks.length === 0) return null;
+              const issues = catChecks.filter(c => c.status === 'fail' || c.status === 'warn');
+              return (
+                <div key={cat} className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      {CATEGORY_LABELS[cat] ?? cat}
+                    </h4>
+                    {issues.length > 0 && (
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                        {issues.length} issue{issues.length > 1 ? 's' : ''}
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    {catChecks.map(c => (
+                      <div key={c.id} className="space-y-1.5">
+                        <CheckCard check={c} resolveButton={getResolveButton(c)} />
+                        {getResolveForm(c)}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </>
       )}

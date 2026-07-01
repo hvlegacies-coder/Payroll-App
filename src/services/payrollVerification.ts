@@ -4,6 +4,18 @@ import { fetchPayrollLookups } from '@/services/payrollRowProcessor';
 export type CheckSeverity = 'error' | 'warning' | 'info';
 export type CheckStatus = 'pass' | 'fail' | 'warn' | 'skip';
 
+export interface PrepToAdd {
+  ptin: string;
+  contractor: string;
+}
+
+export interface PrepToFix {
+  ptin: string;
+  contractor: string;
+}
+
+export type ResolveType = 'add_preparers' | 'set_share' | 'set_office';
+
 export interface VerificationCheck {
   id: string;
   category: 'uploads' | 'preparer_matching' | 'data_quality';
@@ -15,6 +27,8 @@ export interface VerificationCheck {
   details: string[];
   fixPath?: string;
   fixLabel?: string;
+  resolveType?: ResolveType;
+  resolveData?: PrepToAdd[] | PrepToFix[];
 }
 
 export interface VerificationReport {
@@ -201,8 +215,11 @@ export async function runPayrollVerification(weekLabel: string): Promise<Verific
   }
 
   const unmatchedPtins: string[] = [];
+  const unmatchedPtinsRaw: PrepToAdd[] = [];
   const zeroSharePtins: string[] = [];
+  const zeroSharePtinsRaw: PrepToFix[] = [];
   const noOfficePtins: string[] = [];
+  const noOfficePtinsRaw: PrepToFix[] = [];
 
   for (const [ptin, count] of Object.entries(ptinCounts)) {
     const inLookup = !!lookups.ptinToPreparers[ptin];
@@ -211,14 +228,17 @@ export async function runPayrollVerification(weekLabel: string): Promise<Verific
 
     if (!inLookup) {
       unmatchedPtins.push(`${displayPtin} — ${count} row(s) will be excluded from payroll`);
+      unmatchedPtinsRaw.push({ ptin: displayPtin, contractor: displayPtin });
     } else {
       if (detail?.share_percent === 0) {
         const name = detail.contractor || displayPtin;
         zeroSharePtins.push(`${name} (${displayPtin}) — ${count} row(s), pay will be $0`);
+        zeroSharePtinsRaw.push({ ptin: displayPtin, contractor: name });
       }
       if (detail && !detail.tax_office) {
         const name = detail.contractor || displayPtin;
         noOfficePtins.push(`${name} (${displayPtin}) — no tax office assigned`);
+        noOfficePtinsRaw.push({ ptin: displayPtin, contractor: name });
       }
     }
   }
@@ -233,7 +253,8 @@ export async function runPayrollVerification(weekLabel: string): Promise<Verific
           title: `${unmatchedPtins.length} Unmatched PTIN${unmatchedPtins.length > 1 ? 's' : ''}`,
           description: 'These PTINs appear in the Payroll Report but are not in the Preparers table. Those rows will be excluded from ALL pay calculations.',
           affectedCount: unmatchedPtins.length, details: unmatchedPtins.slice(0, 50),
-          fixPath: '/preparers', fixLabel: 'Go to Preparers' }
+          fixPath: '/preparers', fixLabel: 'Go to Preparers',
+          resolveType: 'add_preparers', resolveData: unmatchedPtinsRaw }
   );
 
   checks.push(
@@ -244,7 +265,8 @@ export async function runPayrollVerification(weekLabel: string): Promise<Verific
           title: `${zeroSharePtins.length} Preparer${zeroSharePtins.length > 1 ? 's' : ''} With 0% Share`,
           description: 'These preparers have share_percent = 0%. They will compute $0 pay even if they have valid rows. Update their profile to set the correct percentage.',
           affectedCount: zeroSharePtins.length, details: zeroSharePtins,
-          fixPath: '/preparers', fixLabel: 'Go to Preparers' }
+          fixPath: '/preparers', fixLabel: 'Go to Preparers',
+          resolveType: 'set_share', resolveData: zeroSharePtinsRaw }
   );
 
   checks.push(
@@ -255,7 +277,8 @@ export async function runPayrollVerification(weekLabel: string): Promise<Verific
           title: `${noOfficePtins.length} Preparer${noOfficePtins.length > 1 ? 's' : ''} Without Office`,
           description: 'These preparers have no tax_office set. Their rows will be excluded from office totals and may show as "missing_office" status.',
           affectedCount: noOfficePtins.length, details: noOfficePtins,
-          fixPath: '/preparers', fixLabel: 'Go to Preparers' }
+          fixPath: '/preparers', fixLabel: 'Go to Preparers',
+          resolveType: 'set_office', resolveData: noOfficePtinsRaw }
   );
 
   // ── DATA QUALITY CHECKS ───────────────────────────────────────────────────
