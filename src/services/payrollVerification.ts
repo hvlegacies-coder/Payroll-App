@@ -253,7 +253,8 @@ export async function runPayrollVerification(weekLabel: string): Promise<Verific
           title: `${unmatchedPtins.length} Unmatched PTIN${unmatchedPtins.length > 1 ? 's' : ''}`,
           description: 'These PTINs appear in the Payroll Report but are not in the Preparers table. Those rows will be excluded from ALL pay calculations.',
           affectedCount: unmatchedPtins.length, details: unmatchedPtins.slice(0, 50),
-          fixPath: '/preparers', fixLabel: 'Go to Preparers',
+          fixPath: `/preparers?vfilter=ptin_not_found&ptins=${unmatchedPtinsRaw.map(p => encodeURIComponent(p.ptin)).join(',')}`,
+          fixLabel: 'Go to Preparers',
           resolveType: 'add_preparers', resolveData: unmatchedPtinsRaw }
   );
 
@@ -265,7 +266,8 @@ export async function runPayrollVerification(weekLabel: string): Promise<Verific
           title: `${zeroSharePtins.length} Preparer${zeroSharePtins.length > 1 ? 's' : ''} With 0% Share`,
           description: 'These preparers have share_percent = 0%. They will compute $0 pay even if they have valid rows. Update their profile to set the correct percentage.',
           affectedCount: zeroSharePtins.length, details: zeroSharePtins,
-          fixPath: '/preparers', fixLabel: 'Go to Preparers',
+          fixPath: '/preparers?vfilter=zero_share',
+          fixLabel: 'Go to Preparers',
           resolveType: 'set_share', resolveData: zeroSharePtinsRaw }
   );
 
@@ -277,7 +279,8 @@ export async function runPayrollVerification(weekLabel: string): Promise<Verific
           title: `${noOfficePtins.length} Preparer${noOfficePtins.length > 1 ? 's' : ''} Without Office`,
           description: 'These preparers have no tax_office set. Their rows will be excluded from office totals and may show as "missing_office" status.',
           affectedCount: noOfficePtins.length, details: noOfficePtins,
-          fixPath: '/preparers', fixLabel: 'Go to Preparers',
+          fixPath: '/preparers?vfilter=no_office',
+          fixLabel: 'Go to Preparers',
           resolveType: 'set_office', resolveData: noOfficePtinsRaw }
   );
 

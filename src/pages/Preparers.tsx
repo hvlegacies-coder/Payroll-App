@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { PageHeader } from '@/components/payroll/PageHeader';
 import { KpiCard } from '@/components/payroll/KpiCard';
 import { StatusBadge } from '@/components/payroll/StatusBadge';
 import { FilterBar } from '@/components/payroll/FilterBar';
 import { DataTable, Column } from '@/components/payroll/DataTable';
-import { UserCheck, DollarSign, Users, Upload, Plus, Save, Loader2, Pencil, Trash2, ChevronLeft, ChevronRight, FileBarChart } from 'lucide-react';
+import { UserCheck, DollarSign, Users, Upload, Plus, Save, Loader2, Pencil, Trash2, ChevronLeft, ChevronRight, FileBarChart, AlertTriangle, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -67,6 +68,10 @@ const emptyPreparer: Omit<Preparer, 'id'> = {
 
 export default function Preparers() {
   const { selectedWeek } = useActiveWeek();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const vfilter = searchParams.get('vfilter') ?? '';
+  const vptins = (searchParams.get('ptins') ?? '').split(',').map(p => p.trim().toUpperCase()).filter(Boolean);
+
   const [generatingReports, setGeneratingReports] = useState(false);
   const [search, setSearch] = useState('');
   const [officeFilter, setOfficeFilter] = useState<string[]>([]);
@@ -186,7 +191,11 @@ export default function Preparers() {
   const filtered = preparers.filter(p => {
     const searchMatch = !search || [p.contractor, p.ptin, p.tax_office, p.efin].some(v => String(v || '').toLowerCase().includes(search.toLowerCase()));
     const officeMatch = officeFilter.length === 0 || officeFilter.includes(p.tax_office);
-    return searchMatch && officeMatch;
+    let vMatch = true;
+    if (vfilter === 'zero_share') vMatch = p.share_percent === 0 && p.active;
+    else if (vfilter === 'no_office') vMatch = !p.tax_office && p.active;
+    else if (vfilter === 'ptin_not_found') vMatch = vptins.length > 0 && vptins.includes((p.ptin ?? '').toUpperCase());
+    return searchMatch && officeMatch && vMatch;
   });
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage));
@@ -393,6 +402,51 @@ export default function Preparers() {
         <div className="mb-4 p-4 bg-card rounded-xl border border-border space-y-2">
           <div className="flex items-center gap-2 text-sm"><Loader2 className="h-4 w-4 animate-spin text-primary" /> Importing preparers...</div>
           <Progress value={uploadProgress} className="h-2" />
+        </div>
+      )}
+
+      {/* Verification filter banner */}
+      {vfilter && (
+        <div className="mb-4 flex items-start gap-3 p-3 rounded-lg border border-yellow-400/50 bg-yellow-50/40 dark:bg-yellow-900/15">
+          <AlertTriangle className="h-4 w-4 text-yellow-600 shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            {vfilter === 'zero_share' && (
+              <>
+                <p className="text-sm font-semibold text-yellow-800 dark:text-yellow-200">Filtered: Preparers with 0% share rate</p>
+                <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-0.5">
+                  These {filtered.length} active preparer{filtered.length !== 1 ? 's' : ''} have share_percent = 0 and will earn $0 this payroll week. Click a row to set their share %.
+                </p>
+              </>
+            )}
+            {vfilter === 'no_office' && (
+              <>
+                <p className="text-sm font-semibold text-yellow-800 dark:text-yellow-200">Filtered: Preparers with no office assignment</p>
+                <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-0.5">
+                  These {filtered.length} active preparer{filtered.length !== 1 ? 's' : ''} have no tax office set. Their rows will be excluded from office totals. Click a row to assign an office.
+                </p>
+              </>
+            )}
+            {vfilter === 'ptin_not_found' && (
+              <>
+                <p className="text-sm font-semibold text-yellow-800 dark:text-yellow-200">
+                  {vptins.length} PTIN{vptins.length !== 1 ? 's' : ''} from the Payroll Report not found in Preparers
+                </p>
+                <p className="text-xs font-mono text-yellow-700 dark:text-yellow-300 mt-0.5 break-all">
+                  {vptins.join(' · ')}
+                </p>
+                <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-1">
+                  Use "Add Preparer" to register each one. Rows with these PTINs will be excluded from payroll until they are added.
+                </p>
+              </>
+            )}
+          </div>
+          <button
+            className="shrink-0 text-yellow-600 hover:text-yellow-800 dark:hover:text-yellow-200 transition-colors"
+            onClick={() => setSearchParams({})}
+            aria-label="Clear verification filter"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
       )}
 
