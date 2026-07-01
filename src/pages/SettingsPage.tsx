@@ -63,6 +63,12 @@ export default function SettingsPage() {
   const [newOwnerPwShow, setNewOwnerPwShow] = useState(false);
   const [savingOwner, setSavingOwner] = useState(false);
 
+  // Set password for existing owner/office account
+  const [ownerPwId, setOwnerPwId] = useState<string | null>(null);
+  const [ownerNewPw, setOwnerNewPw] = useState('');
+  const [ownerPwShow, setOwnerPwShow] = useState(false);
+  const [savingOwnerPw, setSavingOwnerPw] = useState(false);
+
   // Create / reset preparer login
   const [prepLoginId, setPrepLoginId] = useState<string | null>(null);
   const [prepEmail, setPrepEmail] = useState('');
@@ -182,6 +188,41 @@ export default function SettingsPage() {
       toast.error('Failed to create account: ' + err.message);
     } finally {
       setSavingOwner(false);
+    }
+  };
+
+  const openOwnerPw = (username: string) => {
+    if (ownerPwId === username) { setOwnerPwId(null); return; }
+    setOwnerPwId(username);
+    setOwnerNewPw('');
+    setOwnerPwShow(false);
+  };
+
+  const setOwnerPassword = async (acct: typeof OWNER_ACCOUNTS[0]) => {
+    if (ownerNewPw.length < 6) { toast.error('Password must be at least 6 characters.'); return; }
+    setSavingOwnerPw(true);
+    try {
+      // Try signUp first (works if account doesn't exist yet)
+      const { error: signUpErr } = await supabase.auth.signUp({
+        email: acct.email,
+        password: ownerNewPw,
+      });
+      if (!signUpErr) {
+        toast.success(`Account created for ${acct.label}.`);
+      } else {
+        // Account already exists — send reset email so they can update it
+        const { error: resetErr } = await supabase.auth.resetPasswordForEmail(acct.email, {
+          redirectTo: window.location.origin + '/login',
+        });
+        if (resetErr) throw resetErr;
+        toast.success(`Reset link sent to ${acct.email} — they must click it to set the new password.`);
+      }
+      setOwnerPwId(null);
+      setOwnerNewPw('');
+    } catch (err: any) {
+      toast.error('Failed: ' + err.message);
+    } finally {
+      setSavingOwnerPw(false);
     }
   };
 
@@ -437,22 +478,75 @@ export default function SettingsPage() {
                 <div className="space-y-1.5">
                   {OWNER_ACCOUNTS.map(acct => {
                     const isResetting = resetingEmail === acct.email;
+                    const isPwOpen = ownerPwId === acct.username;
                     return (
-                      <div key={acct.email} className="flex items-center justify-between px-4 py-2.5 rounded-lg border border-border bg-background hover:bg-muted/30 transition-colors">
-                        <div>
-                          <p className="text-sm font-medium">{acct.label}</p>
-                          <p className="text-[10px] text-muted-foreground">{acct.email} · username: <span className="font-mono">{acct.username}</span></p>
+                      <div key={acct.email} className="rounded-lg border border-border overflow-hidden">
+                        <div className="flex items-center justify-between px-4 py-2.5 bg-background hover:bg-muted/20 transition-colors">
+                          <div>
+                            <p className="text-sm font-medium">{acct.label}</p>
+                            <p className="text-[10px] text-muted-foreground">{acct.email} · username: <span className="font-mono">{acct.username}</span></p>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="gap-1 h-7 text-xs text-muted-foreground hover:text-foreground"
+                              onClick={() => sendPasswordReset(acct.email)}
+                              disabled={!!resetingEmail}
+                            >
+                              {isResetting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Mail className="h-3 w-3" />}
+                              {isResetting ? 'Sending…' : 'Reset Email'}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant={isPwOpen ? 'secondary' : 'outline'}
+                              className="gap-1 h-7 text-xs"
+                              onClick={() => openOwnerPw(acct.username)}
+                            >
+                              {isPwOpen ? <ChevronDown className="h-3 w-3" /> : <KeyRound className="h-3 w-3" />}
+                              {isPwOpen ? 'Cancel' : 'Set Password'}
+                            </Button>
+                          </div>
                         </div>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="gap-1.5 h-7 text-xs text-muted-foreground hover:text-foreground"
-                          onClick={() => sendPasswordReset(acct.email)}
-                          disabled={!!resetingEmail}
-                        >
-                          {isResetting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Mail className="h-3 w-3" />}
-                          {isResetting ? 'Sending…' : 'Send Reset'}
-                        </Button>
+
+                        {isPwOpen && (
+                          <div className="border-t border-border px-4 py-4 space-y-3 bg-muted/20">
+                            <p className="text-xs font-semibold flex items-center gap-1.5">
+                              <KeyRound className="h-3.5 w-3.5" /> Set password for {acct.label}
+                            </p>
+                            <div>
+                              <label className="text-xs text-muted-foreground">New Password *</label>
+                              <div className="relative mt-1">
+                                <Input
+                                  type={ownerPwShow ? 'text' : 'password'}
+                                  value={ownerNewPw}
+                                  onChange={e => setOwnerNewPw((e.target as HTMLInputElement).value)}
+                                  placeholder="Min. 6 characters"
+                                  className="text-sm pr-9"
+                                />
+                                <button
+                                  type="button"
+                                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                  onClick={() => setOwnerPwShow(!ownerPwShow)}
+                                >
+                                  {ownerPwShow ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                                </button>
+                              </div>
+                            </div>
+                            <p className="text-[10px] text-muted-foreground">
+                              If this account already exists, a password reset link will be sent to <span className="font-medium">{acct.email}</span> instead.
+                            </p>
+                            <Button
+                              size="sm"
+                              onClick={() => setOwnerPassword(acct)}
+                              disabled={savingOwnerPw}
+                              className="gap-1.5"
+                            >
+                              {savingOwnerPw ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Lock className="h-3.5 w-3.5" />}
+                              {savingOwnerPw ? 'Saving…' : 'Save Password'}
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
