@@ -5,6 +5,8 @@ import { StatusBadge } from '@/components/payroll/StatusBadge';
 import { FilterBar } from '@/components/payroll/FilterBar';
 import { DataTable, Column } from '@/components/payroll/DataTable';
 import { Building2, Plus, Save, Loader2, Upload, Trash2 } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import LookupManagement from './LookupManagement';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -243,7 +245,7 @@ export default function Offices() {
   return (
     <div>
       <input type="file" ref={fileRef} className="hidden" accept=".xlsx,.xls,.csv" onChange={e => { const f = e.target.files?.[0]; if (f) handleUpload(f); e.target.value = ''; }} />
-      <PageHeader title="Offices" description="Manage office profiles and configurations" actions={
+      <PageHeader title="Master PTIN (Office)" description="Manage office profiles and backend fee configurations" actions={
         <div className="flex gap-2">
           <Button variant="outline" className="gap-2" onClick={() => fileRef.current?.click()}>
             <Upload className="h-4 w-4" /> Upload Offices
@@ -254,26 +256,39 @@ export default function Offices() {
         </div>
       } />
 
-      <div className="grid grid-cols-2 gap-4 mb-6">
-        {kpis.map(k => <KpiCard key={k.title} {...k} />)}
-      </div>
+      <Tabs defaultValue="offices" className="mt-2">
+        <TabsList className="mb-4">
+          <TabsTrigger value="offices">Offices</TabsTrigger>
+          <TabsTrigger value="backend-fees">Backend Fees</TabsTrigger>
+        </TabsList>
 
-      {uploading && (
-        <div className="mb-4 p-4 bg-card rounded-xl border border-border space-y-2">
-          <div className="flex items-center gap-2 text-sm"><Loader2 className="h-4 w-4 animate-spin text-primary" /> Importing offices...</div>
-          <Progress value={uploadProgress} className="h-2" />
-        </div>
-      )}
+        <TabsContent value="offices">
+          <div className="grid grid-cols-2 gap-4 mb-6">
+            {kpis.map(k => <KpiCard key={k.title} {...k} />)}
+          </div>
 
-      <FilterBar search={search} onSearchChange={setSearch} searchPlaceholder="Search by office name, EFIN..." />
+          {uploading && (
+            <div className="mb-4 p-4 bg-card rounded-xl border border-border space-y-2">
+              <div className="flex items-center gap-2 text-sm"><Loader2 className="h-4 w-4 animate-spin text-primary" /> Importing offices...</div>
+              <Progress value={uploadProgress} className="h-2" />
+            </div>
+          )}
 
-      {loading ? (
-        <div className="flex items-center gap-2 py-8 justify-center text-muted-foreground">
-          <Loader2 className="h-5 w-5 animate-spin" /> Loading offices...
-        </div>
-      ) : (
-        <DataTable columns={columns} data={filtered} onRowClick={openEdit} />
-      )}
+          <FilterBar search={search} onSearchChange={setSearch} searchPlaceholder="Search by office name, EFIN..." />
+
+          {loading ? (
+            <div className="flex items-center gap-2 py-8 justify-center text-muted-foreground">
+              <Loader2 className="h-5 w-5 animate-spin" /> Loading offices...
+            </div>
+          ) : (
+            <DataTable columns={columns} data={filtered} onRowClick={openEdit} />
+          )}
+        </TabsContent>
+
+        <TabsContent value="backend-fees">
+          <LookupManagement embedded />
+        </TabsContent>
+      </Tabs>
 
       <Dialog open={isFormOpen} onOpenChange={(open) => { if (!open) { setEditItem(null); setAddOpen(false); } }}>
         <DialogContent className="max-w-xl">

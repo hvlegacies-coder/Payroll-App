@@ -27,7 +27,7 @@ interface AllOfficeConfigs {
 
 const FEE_TYPES: FeeType[] = ['E-File Fee(s)', 'Service Bureau Fee', 'ERO3Fee', 'Transmitter Fee'];
 
-export default function LookupManagement() {
+export default function LookupManagement({ embedded = false }: { embedded?: boolean }) {
   const [offices, setOffices] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedOffice, setSelectedOffice] = useState<string | null>(null);
@@ -139,7 +139,7 @@ export default function LookupManagement() {
   if (loading) {
     return (
       <div>
-        <PageHeader title="Backend Breakdown" description="Configure backend fee calculations per office" />
+        {!embedded && <PageHeader title="Backend Breakdown" description="Configure backend fee calculations per office" />}
         <div className="flex items-center justify-center py-20 text-muted-foreground text-sm">Loading offices…</div>
       </div>
     );
@@ -147,11 +147,20 @@ export default function LookupManagement() {
 
   return (
     <div>
-      <PageHeader
-        title="Backend Breakdown"
-        description="Configure backend fee calculations per office"
-        actions={<Button onClick={handleSave} disabled={saving} className="gap-2"><DollarSign className="h-4 w-4" /> {saving ? 'Saving…' : 'Save Configuration'}</Button>}
-      />
+      {!embedded && (
+        <PageHeader
+          title="Backend Breakdown"
+          description="Configure backend fee calculations per office"
+          actions={<Button onClick={handleSave} disabled={saving} className="gap-2"><DollarSign className="h-4 w-4" /> {saving ? 'Saving…' : 'Save Configuration'}</Button>}
+        />
+      )}
+
+      {embedded && (
+        <div className="flex items-center justify-between mb-4">
+          <p className="text-sm text-muted-foreground">Configure backend fee calculations per office</p>
+          <Button onClick={handleSave} disabled={saving} className="gap-2"><DollarSign className="h-4 w-4" /> {saving ? 'Saving…' : 'Save Configuration'}</Button>
+        </div>
+      )}
 
       {/* Office selector */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 mb-8">
