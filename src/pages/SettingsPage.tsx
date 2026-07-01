@@ -12,10 +12,20 @@ import {
   ExternalLink, Headset, Lock, CalendarDays, Sun, Moon, Monitor,
   Plus, CheckCircle2, Loader2, Shield, KeyRound, UserPlus, Mail,
   ChevronDown, ChevronRight, Eye, EyeOff, RefreshCw, Building2, UserCheck,
+  GitBranch, X,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
 const TABS = ['Payroll Week', 'Account', 'Appearance', 'Support', 'Credentials'];
+
+// Sub-accounts that should exist under the Higher View parent
+const SUB_ACCOUNT_DEFS = [
+  { name: 'D & D',      slug: 'd-and-d',    hint: 'd&d' },
+  { name: 'King J',     slug: 'king-j',     hint: 'kingj' },
+  { name: 'Main Event', slug: 'main-event', hint: 'mainevent' },
+  { name: 'PowerPlay',  slug: 'powerplay',  hint: 'powerplay' },
+  { name: 'S & C',      slug: 's-and-c',    hint: 's&c' },
+];
 
 // Mirrors the ownerMap in Login.tsx — deduplicated by email
 const OWNER_ACCOUNTS = [
@@ -76,8 +86,19 @@ export default function SettingsPage() {
   const [prepPwShow, setPrepPwShow] = useState(false);
   const [savingPrepLogin, setSavingPrepLogin] = useState(false);
 
+  // Sub-account users
+  type SubAcct = { id: string; name: string; slug: string; users: string[] };
+  const [subAccounts, setSubAccounts] = useState<SubAcct[]>([]);
+  const [loadingSubAccounts, setLoadingSubAccounts] = useState(false);
+  const [addSubUserSlug, setAddSubUserSlug] = useState<string | null>(null);
+  const [newSubUsername, setNewSubUsername] = useState('');
+  const [savingSubUser, setSavingSubUser] = useState(false);
+
   useEffect(() => {
-    if (tab === 'Credentials') loadPreparers();
+    if (tab === 'Credentials') {
+      loadPreparers();
+      loadSubAccounts();
+    }
   }, [tab]);
 
   // ── Payroll week handlers ──
@@ -252,6 +273,79 @@ export default function SettingsPage() {
       toast.error('Failed to create login: ' + err.message);
     } finally {
       setSavingPrepLogin(false);
+    }
+  };
+
+  const loadSubAccounts = async () => {
+    setLoadingSubAccounts(true);
+    try {
+      // Get parent account id
+      const { data: hvAcct } = await (supabase as any)
+        .from('accounts').select('id').eq('slug', 'higher-view').maybeSingle();
+
+      // Ensure all sub-accounts exist
+      if (hvAcct?.id) {
+        const { data: existing } = await (supabase as any)
+          .from('accounts').select('slug').not('parent_account_id', 'is', null);
+        const existingSlugs: string[] = (existing ?? []).map((a: any) => a.slug);
+        for (const def of SUB_ACCOUNT_DEFS) {
+          if (!existingSlugs.includes(def.slug)) {
+            await (supabase as any).from('accounts').insert({
+              name: def.name, slug: def.slug, parent_account_id: hvAcct.id,
+            });
+          }
+        }
+      }
+
+      // Load all sub-accounts with their users
+      const { data: accts } = await (supabase as any)
+        .from('accounts').select('id,name,slug')
+        .not('parent_account_id', 'is', null).order('name');
+      const ids = (accts ?? []).map((a: any) => a.id);
+      const { data: users } = ids.length
+        ? await (supabase as any).from('account_users').select('account_id,username').in('account_id', ids)
+        : { data: [] };
+      const usersMap: Record<string, string[]> = {};
+      (users ?? []).forEach((u: any) => {
+        if (!usersMap[u.account_id]) usersMap[u.account_id] = [];
+        usersMap[u.account_id].push(u.username);
+      });
+      setSubAccounts((accts ?? []).map((a: any) => ({ ...a, users: usersMap[a.id] ?? [] })));
+    } catch (err: any) {
+      toast.error('Could not load sub-accounts: ' + err.message);
+    } finally {
+      setLoadingSubAccounts(false);
+    }
+  };
+
+  const addSubUser = async (accountId: string) => {
+    if (!newSubUsername.trim()) { toast.error('Username is required.'); return; }
+    setSavingSubUser(true);
+    try {
+      const { error } = await (supabase as any).from('account_users').insert({
+        account_id: accountId, username: newSubUsername.trim(), role: 'owner',
+      });
+      if (error) throw error;
+      toast.success(`Username "${newSubUsername.trim()}" added.`);
+      setNewSubUsername('');
+      setAddSubUserSlug(null);
+      await loadSubAccounts();
+    } catch (err: any) {
+      toast.error('Failed: ' + err.message);
+    } finally {
+      setSavingSubUser(false);
+    }
+  };
+
+  const removeSubUser = async (accountId: string, username: string) => {
+    try {
+      const { error } = await (supabase as any)
+        .from('account_users').delete().eq('account_id', accountId).eq('username', username);
+      if (error) throw error;
+      toast.success(`"${username}" removed.`);
+      await loadSubAccounts();
+    } catch (err: any) {
+      toast.error('Failed: ' + err.message);
     }
   };
 
@@ -665,6 +759,95 @@ export default function SettingsPage() {
                               {savingPrepLogin ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UserPlus className="h-3.5 w-3.5" />}
                               {savingPrepLogin ? 'Creating…' : 'Create Login'}
                             </Button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+
+              {/* ── Sub-Account Users ── */}
+              <section className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <GitBranch className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm font-semibold">Sub-Account Login Users</span>
+                    <Badge variant="outline" className="text-[10px]">{subAccounts.length}</Badge>
+                  </div>
+                  <Button size="sm" variant="ghost" className="gap-1.5 h-7 text-xs" onClick={loadSubAccounts} disabled={loadingSubAccounts}>
+                    {loadingSubAccounts ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                    Refresh
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Sub-account owners log in at <span className="font-mono">/login/sub</span> with their username and the shared sub-account password. Each office can have multiple usernames.
+                </p>
+
+                {loadingSubAccounts && (
+                  <div className="flex items-center gap-2 py-4 text-xs text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Setting up sub-accounts…
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  {!loadingSubAccounts && subAccounts.length === 0 && (
+                    <p className="text-xs text-muted-foreground text-center py-4">No sub-accounts found. Click Refresh to set them up.</p>
+                  )}
+                  {subAccounts.map(acct => {
+                    const isAdding = addSubUserSlug === acct.slug;
+                    return (
+                      <div key={acct.id} className="rounded-lg border border-border overflow-hidden">
+                        <div className="flex items-center justify-between px-4 py-2.5 bg-background hover:bg-muted/20 transition-colors">
+                          <div>
+                            <p className="text-sm font-medium">{acct.name}</p>
+                            <p className="text-[10px] text-muted-foreground font-mono">slug: {acct.slug}</p>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant={isAdding ? 'secondary' : 'outline'}
+                            className="gap-1 h-7 text-xs"
+                            onClick={() => { setAddSubUserSlug(isAdding ? null : acct.slug); setNewSubUsername(''); }}
+                          >
+                            {isAdding ? <ChevronDown className="h-3 w-3" /> : <UserPlus className="h-3 w-3" />}
+                            {isAdding ? 'Cancel' : 'Add Username'}
+                          </Button>
+                        </div>
+
+                        {/* Existing usernames */}
+                        {acct.users.length > 0 && (
+                          <div className="border-t border-border px-4 py-2 flex flex-wrap gap-1.5 bg-muted/10">
+                            {acct.users.map(u => (
+                              <span key={u} className="flex items-center gap-1 text-[11px] bg-muted px-2 py-0.5 rounded-md font-mono">
+                                {u}
+                                <button
+                                  className="text-muted-foreground hover:text-destructive transition-colors ml-0.5"
+                                  onClick={() => removeSubUser(acct.id, u)}
+                                  title={`Remove "${u}"`}
+                                >
+                                  <X className="h-2.5 w-2.5" />
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Add username inline form */}
+                        {isAdding && (
+                          <div className="border-t border-border px-4 py-3 space-y-2 bg-muted/20">
+                            <label className="text-xs text-muted-foreground">New Username</label>
+                            <div className="flex gap-2">
+                              <Input
+                                value={newSubUsername}
+                                onChange={e => setNewSubUsername((e.target as HTMLInputElement).value)}
+                                placeholder={`e.g. ${SUB_ACCOUNT_DEFS.find(d => d.slug === acct.slug)?.hint ?? acct.slug}`}
+                                className="text-sm h-8"
+                                onKeyDown={e => { if (e.key === 'Enter') addSubUser(acct.id); }}
+                              />
+                              <Button size="sm" onClick={() => addSubUser(acct.id)} disabled={savingSubUser} className="h-8 px-3">
+                                {savingSubUser ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Add'}
+                              </Button>
+                            </div>
                           </div>
                         )}
                       </div>
