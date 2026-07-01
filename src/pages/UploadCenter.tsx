@@ -4,7 +4,7 @@ import { StatusBadge } from '@/components/payroll/StatusBadge';
 import { FilterBar } from '@/components/payroll/FilterBar';
 import { DataTable, Column } from '@/components/payroll/DataTable';
 import { Button } from '@/components/ui/button';
-import { Upload, FileText, DollarSign, Users, Mail, Shield, CheckCircle2, AlertTriangle, XCircle, Loader2, Trash2 } from 'lucide-react';
+import { Upload, FileText, DollarSign, Users, Mail, Shield, CheckCircle2, AlertTriangle, XCircle, Loader2, Trash2, ShieldCheck } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { parseFile, validateHeaders, getExpectedHeaders, type ParsedFile } from '@/services/fileParser';
@@ -14,6 +14,8 @@ import { Progress } from '@/components/ui/progress';
 import { supabase } from '@/integrations/supabase/client';
 import { useActiveWeek } from '@/hooks/useActiveWeek';
 import { generatePreparerWeeklyReports } from '@/services/preparerReportGenerator';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { VerificationPanel } from '@/components/payroll/VerificationPanel';
 
 /**
  * SHA-256 hash of file bytes, hex-encoded. Used to detect when the exact
@@ -69,6 +71,8 @@ export default function UploadCenter() {
   const [deleteTarget, setDeleteTarget] = useState<UploadRecord | null>(null);
   const [deleting, setDeleting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [mainTab, setMainTab] = useState<'uploads' | 'verify'>('uploads');
 
   const isAdmin = localStorage.getItem('hvt_user') === 'Payroll' || !localStorage.getItem('hvt_user');
   const uploadTypes = isAdmin ? ALL_UPLOAD_TYPES : ALL_UPLOAD_TYPES.filter(t => !t.adminOnly);
@@ -364,39 +368,56 @@ export default function UploadCenter() {
       <input type="file" ref={fileInputRef} className="hidden" />
       <PageHeader title="Upload Center" description="Upload and manage payroll data files for payroll runs" />
 
-      {!isAdmin && (
-        <div className="mb-4 p-3 rounded-lg bg-primary/10 border border-primary/20 text-sm">
-          <strong>Office Owner Access</strong> — You can upload Payroll, Backend Money, Client Data, and Client Email reports for your office.
-        </div>
-      )}
+      <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as 'uploads' | 'verify')}>
+        <TabsList className="mb-6 bg-surface-ash">
+          <TabsTrigger value="uploads" className="text-xs">Uploads</TabsTrigger>
+          <TabsTrigger value="verify" className="text-xs gap-1.5">
+            <ShieldCheck className="h-3.5 w-3.5" /> Verify
+          </TabsTrigger>
+        </TabsList>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-        {uploadTypes.map((type) => (
-          <div key={type.label} className="bg-card rounded-xl border border-border p-5 shadow-card hover:shadow-elevated transition-shadow">
-            <div className="flex items-start gap-3">
-              <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0"><type.icon className="h-5 w-5 text-primary" /></div>
-              <div className="flex-1 min-w-0">
-                <h3 className="text-sm font-medium">{(type as any).displayLabel || type.label}</h3>
-                <p className="text-xs text-muted-foreground mt-0.5">{type.desc}</p>
-                <p className="text-[10px] text-muted-foreground mt-1">Accepts: {type.accept}</p>
-              </div>
+        <TabsContent value="uploads">
+          {!isAdmin && (
+            <div className="mb-4 p-3 rounded-lg bg-primary/10 border border-primary/20 text-sm">
+              <strong>Office Owner Access</strong> — You can upload Payroll, Backend Money, Client Data, and Client Email reports for your office.
             </div>
-            <Button variant="outline" size="sm" className="w-full mt-4 gap-2" onClick={() => triggerUpload(type.label, type.accept)}>
-              <Upload className="h-3 w-3" /> Upload File
-            </Button>
-          </div>
-        ))}
-      </div>
+          )}
 
-      <h3 className="text-lg font-semibold mb-3">Upload History</h3>
-      <FilterBar search={search} onSearchChange={setSearch} searchPlaceholder="Search uploads..." />
-      {loading ? (
-        <div className="flex items-center gap-2 py-8 justify-center text-muted-foreground">
-          <Loader2 className="h-5 w-5 animate-spin" /> Loading uploads...
-        </div>
-      ) : (
-        <DataTable columns={columns} data={filtered} onRowClick={(row) => setPreviewRow(row)} />
-      )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+            {uploadTypes.map((type) => (
+              <div key={type.label} className="bg-card rounded-xl border border-border p-5 shadow-card hover:shadow-elevated transition-shadow">
+                <div className="flex items-start gap-3">
+                  <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0"><type.icon className="h-5 w-5 text-primary" /></div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-sm font-medium">{(type as any).displayLabel || type.label}</h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">{type.desc}</p>
+                    <p className="text-[10px] text-muted-foreground mt-1">Accepts: {type.accept}</p>
+                  </div>
+                </div>
+                <Button variant="outline" size="sm" className="w-full mt-4 gap-2" onClick={() => triggerUpload(type.label, type.accept)}>
+                  <Upload className="h-3 w-3" /> Upload File
+                </Button>
+              </div>
+            ))}
+          </div>
+
+          <h3 className="text-lg font-semibold mb-3">Upload History</h3>
+          <FilterBar search={search} onSearchChange={setSearch} searchPlaceholder="Search uploads..." />
+          {loading ? (
+            <div className="flex items-center gap-2 py-8 justify-center text-muted-foreground">
+              <Loader2 className="h-5 w-5 animate-spin" /> Loading uploads...
+            </div>
+          ) : (
+            <DataTable columns={columns} data={filtered} onRowClick={(row) => setPreviewRow(row)} />
+          )}
+        </TabsContent>
+
+        <TabsContent value="verify">
+          <div className="bg-card rounded-xl border border-border p-6 shadow-card">
+            <VerificationPanel weekLabel={selectedWeek} />
+          </div>
+        </TabsContent>
+      </Tabs>
 
       {/* Historical row preview dialog */}
       <Dialog open={!!previewRow} onOpenChange={() => setPreviewRow(null)}>
