@@ -4,9 +4,7 @@ import { KpiCard } from '@/components/payroll/KpiCard';
 import { StatusBadge } from '@/components/payroll/StatusBadge';
 import { FilterBar } from '@/components/payroll/FilterBar';
 import { DataTable, Column } from '@/components/payroll/DataTable';
-import { Building2, Plus, Save, Loader2, Upload, Trash2 } from 'lucide-react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import LookupManagement from './LookupManagement';
+import { Building2, Plus, Save, Loader2, Upload, Trash2, DollarSign, ChevronDown, ChevronRight, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -21,6 +19,14 @@ import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Badge } from '@/components/ui/badge';
+
+type FeeType = 'E-File Fee(s)' | 'Service Bureau Fee' | 'ERO3Fee' | 'Transmitter Fee';
+const FEE_TYPES: FeeType[] = ['E-File Fee(s)', 'Service Bureau Fee', 'ERO3Fee', 'Transmitter Fee'];
+
+interface OfficeFeeSetting { office_name: string; mode: 'percentage' | 'flat_rate' | 'remaining'; value: number; }
+interface OfficeFeeConfig { [feeType: string]: OfficeFeeSetting[]; }
 
 interface Office {
   id: string;
@@ -91,6 +97,10 @@ export default function Offices() {
   const [deleteTarget, setDeleteTarget] = useState<Office | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  // Backend fee config state
+  const [officeFeeConfig, setOfficeFeeConfig] = useState<OfficeFeeConfig>({});
+  const [expandedDialogFee, setExpandedDialogFee] = useState<FeeType | null>(null);
+
   const loadOffices = useCallback(async () => {
     const acct = getActiveAccountId();
     let q = supabase.from('offices').select('*');
@@ -102,6 +112,54 @@ export default function Offices() {
   }, []);
 
   useEffect(() => { loadOffices(); }, [loadOffices]);
+
+  const loadOfficeFeeConfig = async (officeName: string) => {
+    const { data } = await supabase.from('office_fee_configs').select('*').eq('office_name', officeName);
+    const config: OfficeFeeConfig = {};
+    for (const row of (data || [])) {
+      if (!config[row.fee_type]) config[row.fee_type] = [];
+      config[row.fee_type].push({ office_name: row.target_office, mode: row.mode as any, value: Number(row.value) });
+    }
+    setOfficeFeeConfig(config);
+  };
+
+  const toggleFeeOffice = (fee: FeeType, targetOffice: string) => {
+    setOfficeFeeConfig(prev => {
+      const entries = prev[fee] || [];
+      const exists = entries.some(e => e.office_name === targetOffice);
+      return {
+        ...prev,
+        [fee]: exists
+          ? entries.filter(e => e.office_name !== targetOffice)
+          : [...entries, { office_name: targetOffice, mode: 'percentage', value: 0 }],
+      };
+    });
+  };
+
+  const updateFeeEntry = (fee: FeeType, targetOffice: string, updates: Partial<OfficeFeeSetting>) => {
+    setOfficeFeeConfig(prev => ({
+      ...prev,
+      [fee]: (prev[fee] || []).map(e => e.office_name === targetOffice ? { ...e, ...updates } : e),
+    }));
+  };
+
+  const removeFeeEntry = (fee: FeeType, targetOffice: string) => {
+    setOfficeFeeConfig(prev => ({
+      ...prev,
+      [fee]: (prev[fee] || []).filter(e => e.office_name !== targetOffice),
+    }));
+  };
+
+  const saveFeeConfig = async (officeName: string) => {
+    const rows: any[] = [];
+    for (const [feeType, entries] of Object.entries(officeFeeConfig)) {
+      for (const entry of entries) {
+        rows.push({ office_name: officeName, fee_type: feeType, target_office: entry.office_name, mode: entry.mode, value: entry.value });
+      }
+    }
+    await supabase.from('office_fee_configs').delete().eq('office_name', officeName);
+    if (rows.length > 0) await supabase.from('office_fee_configs').insert(rows);
+  };
 
   const filtered = offices.filter(o => {
     if (!search) return true;
@@ -134,11 +192,7 @@ export default function Offices() {
         else if (norm === 'NOTES') headerMap['notes'] = h;
       });
 
-      if (!headerMap['office_name']) {
-        toast.error('Missing required column: Office Name');
-        setUploading(false);
-        return;
-      }
+      if (!headerMap['office_name']) { toast.error('Missing required column: Office Name'); setUploading(false); return; }
 
       const parseNum = (v: any): number => {
         if (v === undefined || v === null || v === '') return 0;
@@ -182,7 +236,6 @@ export default function Offices() {
     if (!formData.office_name) { toast.error('Office Name is required'); return; }
     setSaving(true);
     try {
-      // Convert clients_belongs_data to string for DB text column
       const payload = {
         ...formData,
         clients_belongs_data: String(formData.clients_belongs_data ?? ''),
@@ -192,6 +245,7 @@ export default function Offices() {
         const { id: _ignoreId, ...updateData } = payload as any;
         const { error } = await supabase.from('offices').update(updateData).eq('id', editItem.id);
         if (error) throw error;
+        await saveFeeConfig(editItem.office_name);
         toast.success('Office updated');
         await logAudit({ action: 'update', entityType: 'office', entityId: editItem.id, entityLabel: editItem.office_name, summary: `Updated office "${editItem.office_name}".` });
       } else {
@@ -204,6 +258,8 @@ export default function Offices() {
       setEditItem(null);
       setAddOpen(false);
       setFormData(emptyOffice);
+      setOfficeFeeConfig({});
+      setExpandedDialogFee(null);
       loadOffices();
     } catch (err: any) {
       toast.error(err.message);
@@ -213,12 +269,14 @@ export default function Offices() {
   };
 
   const openEdit = (o: Office) => {
-    // Normalize clients_belongs_data from string to boolean-like for the Switch
     const normalized = { ...o, clients_belongs_data: o.clients_belongs_data === 'true' || (o.clients_belongs_data as any) === true ? 'true' : '' };
     setFormData(normalized);
     setEditItem(o);
+    setOfficeFeeConfig({});
+    setExpandedDialogFee(null);
+    loadOfficeFeeConfig(o.office_name);
   };
-  const openAdd = () => { setFormData(emptyOffice); setEditItem(null); setAddOpen(true); };
+  const openAdd = () => { setFormData(emptyOffice); setEditItem(null); setAddOpen(true); setOfficeFeeConfig({}); setExpandedDialogFee(null); };
   const isFormOpen = addOpen || !!editItem;
 
   const handleDelete = async () => {
@@ -235,11 +293,7 @@ export default function Offices() {
     }
   };
 
-  const onDeleteClick = (o: Office, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setDeleteTarget(o);
-  };
-
+  const onDeleteClick = (o: Office, e: React.MouseEvent) => { e.stopPropagation(); setDeleteTarget(o); };
   const columns = getColumns(onDeleteClick);
 
   return (
@@ -256,47 +310,34 @@ export default function Offices() {
         </div>
       } />
 
-      <Tabs defaultValue="offices" className="mt-2">
-        <TabsList className="mb-4">
-          <TabsTrigger value="offices">Offices</TabsTrigger>
-          <TabsTrigger value="backend-fees">Backend Fees</TabsTrigger>
-        </TabsList>
+      <div className="grid grid-cols-2 gap-4 mb-6">
+        {kpis.map(k => <KpiCard key={k.title} {...k} />)}
+      </div>
 
-        <TabsContent value="offices">
-          <div className="grid grid-cols-2 gap-4 mb-6">
-            {kpis.map(k => <KpiCard key={k.title} {...k} />)}
-          </div>
+      {uploading && (
+        <div className="mb-4 p-4 bg-card rounded-xl border border-border space-y-2">
+          <div className="flex items-center gap-2 text-sm"><Loader2 className="h-4 w-4 animate-spin text-primary" /> Importing offices...</div>
+          <Progress value={uploadProgress} className="h-2" />
+        </div>
+      )}
 
-          {uploading && (
-            <div className="mb-4 p-4 bg-card rounded-xl border border-border space-y-2">
-              <div className="flex items-center gap-2 text-sm"><Loader2 className="h-4 w-4 animate-spin text-primary" /> Importing offices...</div>
-              <Progress value={uploadProgress} className="h-2" />
-            </div>
-          )}
+      <FilterBar search={search} onSearchChange={setSearch} searchPlaceholder="Search by office name, EFIN..." />
 
-          <FilterBar search={search} onSearchChange={setSearch} searchPlaceholder="Search by office name, EFIN..." />
+      {loading ? (
+        <div className="flex items-center gap-2 py-8 justify-center text-muted-foreground">
+          <Loader2 className="h-5 w-5 animate-spin" /> Loading offices...
+        </div>
+      ) : (
+        <DataTable columns={columns} data={filtered} onRowClick={openEdit} />
+      )}
 
-          {loading ? (
-            <div className="flex items-center gap-2 py-8 justify-center text-muted-foreground">
-              <Loader2 className="h-5 w-5 animate-spin" /> Loading offices...
-            </div>
-          ) : (
-            <DataTable columns={columns} data={filtered} onRowClick={openEdit} />
-          )}
-        </TabsContent>
-
-        <TabsContent value="backend-fees">
-          <LookupManagement embedded />
-        </TabsContent>
-      </Tabs>
-
-      <Dialog open={isFormOpen} onOpenChange={(open) => { if (!open) { setEditItem(null); setAddOpen(false); } }}>
+      <Dialog open={isFormOpen} onOpenChange={(open) => { if (!open) { setEditItem(null); setAddOpen(false); setOfficeFeeConfig({}); setExpandedDialogFee(null); } }}>
         <DialogContent className="max-w-xl">
           <DialogHeader>
             <DialogTitle>{editItem ? 'Edit Office' : 'Add New Office'}</DialogTitle>
             <DialogDescription>{editItem ? `Editing ${editItem.office_name}` : 'Fill in office details'}</DialogDescription>
           </DialogHeader>
-          <div className="grid grid-cols-2 gap-4 max-h-[60vh] overflow-y-auto pr-1">
+          <div className="grid grid-cols-2 gap-4 max-h-[65vh] overflow-y-auto pr-1">
             {FIELD_LABELS.map(f => (
               <div key={f.key}>
                 <label className="text-xs font-medium text-muted-foreground">{f.label}{f.key === 'office_name' && ' *'}</label>
@@ -312,14 +353,10 @@ export default function Offices() {
                     value={String(formData[f.key as keyof typeof formData] ?? '') || '__none__'}
                     onValueChange={val => setFormData(prev => ({ ...prev, [f.key]: val === '__none__' ? '' : val }))}
                   >
-                    <SelectTrigger className="mt-1">
-                      <SelectValue placeholder="Select office..." />
-                    </SelectTrigger>
+                    <SelectTrigger className="mt-1"><SelectValue placeholder="Select office..." /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="__none__">None</SelectItem>
-                      {offices.map(o => (
-                        <SelectItem key={o.id} value={o.office_name}>{o.office_name}</SelectItem>
-                      ))}
+                      {offices.map(o => <SelectItem key={o.id} value={o.office_name}>{o.office_name}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 ) : (
@@ -335,19 +372,9 @@ export default function Offices() {
             {formData.process_preparers_share && (
               <div className="col-span-2">
                 <label className="text-xs font-medium text-muted-foreground">Default Preparers Share</label>
-                <RadioGroup
-                  value={formData.default_preparers_share || 'preparer_client_percent'}
-                  onValueChange={val => setFormData(prev => ({ ...prev, default_preparers_share: val }))}
-                  className="flex gap-6 mt-2"
-                >
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="preparer_client_percent" id="dps_pcp" />
-                    <Label htmlFor="dps_pcp">Preparer Client %</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="office_flat_rate" id="dps_ofr" />
-                    <Label htmlFor="dps_ofr">Office Flat Rate</Label>
-                  </div>
+                <RadioGroup value={formData.default_preparers_share || 'preparer_client_percent'} onValueChange={val => setFormData(prev => ({ ...prev, default_preparers_share: val }))} className="flex gap-6 mt-2">
+                  <div className="flex items-center space-x-2"><RadioGroupItem value="preparer_client_percent" id="dps_pcp" /><Label htmlFor="dps_pcp">Preparer Client %</Label></div>
+                  <div className="flex items-center space-x-2"><RadioGroupItem value="office_flat_rate" id="dps_ofr" /><Label htmlFor="dps_ofr">Office Flat Rate</Label></div>
                 </RadioGroup>
               </div>
             )}
@@ -359,18 +386,81 @@ export default function Offices() {
               <label className="text-xs font-medium text-muted-foreground">Extra EFINs (comma-separated)</label>
               <Input
                 value={(formData.extra_efins || []).join(', ')}
-                onChange={e => setFormData(prev => ({
-                  ...prev,
-                  extra_efins: e.target.value.split(',').map(s => s.trim()).filter(Boolean),
-                }))}
-                className="mt-1 font-mono text-sm"
-                placeholder="e.g. 387641, 390000"
+                onChange={e => setFormData(prev => ({ ...prev, extra_efins: e.target.value.split(',').map(s => s.trim()).filter(Boolean) }))}
+                className="mt-1 font-mono text-sm" placeholder="e.g. 387641, 390000"
               />
               <p className="text-[10px] text-muted-foreground mt-1">Additional EFINs included in this office's Source Rows and tile totals.</p>
             </div>
+
+            {/* Backend Fee Configuration — only shown when editing an existing office */}
+            {editItem && (
+              <div className="col-span-2 border-t border-border pt-4 mt-1">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5">
+                  <DollarSign className="h-3.5 w-3.5 text-primary" /> Backend Fee Configuration
+                </p>
+                <div className="space-y-2">
+                  {FEE_TYPES.map(fee => {
+                    const entries = officeFeeConfig[fee] || [];
+                    const isExp = expandedDialogFee === fee;
+                    return (
+                      <div key={fee} className="border border-border rounded-lg overflow-hidden">
+                        <button type="button" onClick={() => setExpandedDialogFee(isExp ? null : fee)}
+                          className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-muted/30 transition-colors text-left">
+                          <div className="flex items-center gap-2">
+                            <DollarSign className="h-3.5 w-3.5 text-primary" />
+                            <span className="text-xs font-medium">{fee}</span>
+                            {entries.length > 0 && <Badge variant="secondary" className="text-[10px] h-4 px-1.5">{entries.length} office{entries.length !== 1 ? 's' : ''}</Badge>}
+                          </div>
+                          {isExp ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />}
+                        </button>
+
+                        {isExp && (
+                          <div className="px-3 pb-3 border-t border-border space-y-3">
+                            <p className="text-[10px] text-muted-foreground mt-2">Offices receiving this fee:</p>
+                            <div className="flex flex-wrap gap-1.5">
+                              {offices.map(o => (
+                                <label key={o.id} className={`flex items-center gap-1.5 px-2 py-1 rounded border text-[10px] cursor-pointer transition-colors ${
+                                  entries.some(e => e.office_name === o.office_name) ? 'border-primary bg-primary/10 text-primary' : 'border-border hover:bg-muted'
+                                }`}>
+                                  <Checkbox checked={entries.some(e => e.office_name === o.office_name)} onCheckedChange={() => toggleFeeOffice(fee, o.office_name)} className="h-3 w-3" />
+                                  {o.office_name}
+                                </label>
+                              ))}
+                            </div>
+                            {entries.length > 0 && (
+                              <div className="space-y-1.5">
+                                {entries.map(entry => (
+                                  <div key={entry.office_name} className="flex items-center gap-2 bg-muted/30 rounded px-2 py-1.5">
+                                    <span className="text-[10px] font-medium flex-1 truncate min-w-0">{entry.office_name}</span>
+                                    <div className="flex rounded border border-border overflow-hidden text-[10px] shrink-0">
+                                      <button type="button" onClick={() => updateFeeEntry(fee, entry.office_name, { mode: 'percentage' })} className={`px-2 py-1 transition-colors ${entry.mode === 'percentage' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}>%</button>
+                                      <button type="button" onClick={() => updateFeeEntry(fee, entry.office_name, { mode: 'flat_rate' })} className={`px-2 py-1 transition-colors ${entry.mode === 'flat_rate' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}>$</button>
+                                      {entries.length >= 2 && <button type="button" onClick={() => updateFeeEntry(fee, entry.office_name, { mode: 'remaining', value: 0 })} className={`px-2 py-1 transition-colors ${entry.mode === 'remaining' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}>=</button>}
+                                    </div>
+                                    {entry.mode !== 'remaining' ? (
+                                      <Input type="number" value={entry.value || ''} className="h-6 text-[10px] w-16 px-1.5 font-mono shrink-0"
+                                        onChange={e => updateFeeEntry(fee, entry.office_name, { value: parseFloat(e.target.value) || 0 })} />
+                                    ) : (
+                                      <span className="text-[10px] text-muted-foreground italic w-16 text-center shrink-0">Auto</span>
+                                    )}
+                                    <button type="button" onClick={() => removeFeeEntry(fee, entry.office_name)} className="text-muted-foreground hover:text-destructive transition-colors shrink-0">
+                                      <X className="h-3.5 w-3.5" />
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
           <div className="flex gap-2 pt-2 justify-end">
-            <Button variant="outline" onClick={() => { setEditItem(null); setAddOpen(false); }}>Cancel</Button>
+            <Button variant="outline" onClick={() => { setEditItem(null); setAddOpen(false); setOfficeFeeConfig({}); setExpandedDialogFee(null); }}>Cancel</Button>
             <Button className="gap-2" onClick={handleSave} disabled={saving}>
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               {editItem ? 'Save Changes' : 'Add Office'}
