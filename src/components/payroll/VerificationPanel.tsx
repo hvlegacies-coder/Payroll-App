@@ -8,6 +8,7 @@ import {
   ChevronDown, ChevronRight, ArrowRight, RefreshCw, Wrench, Plus,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { getActiveAccountId } from '@/contexts/AccountContext';
 import {
   runPayrollVerification,
   type VerificationReport,
@@ -151,14 +152,16 @@ export function VerificationPanel({ weekLabel }: Props) {
     setResolving(check.id);
     setResolveError(null);
     try {
+      const acct = getActiveAccountId();
       const rows = data.map(p => ({
         ptin: p.ptin.toUpperCase(),
         contractor: p.contractor,
         share_percent: 0,
         tax_office: '',
         active: true,
+        ...(acct ? { account_id: acct } : {}),
       }));
-      const { error } = await (supabase as any).from('preparers').upsert(rows, { onConflict: 'ptin', ignoreDuplicates: true });
+      const { error } = await supabase.from('preparers').insert(rows as any);
       if (error) throw error;
       await runVerification();
     } catch (err: any) {
