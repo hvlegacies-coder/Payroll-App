@@ -541,8 +541,12 @@ export function SummaryTable({ config, onChange, onDelete, officeScope, siblingT
       if ((field.label || '').trim().toLowerCase() === 'agi') {
         return computeAutoField('__auto_agi__', field.filters);
       }
-      // Auto-zero "Processing Fee" when this office has no client payroll rows for the active week
       if ((field.label || '').trim().toLowerCase() === 'processing fee') {
+        // King J only: auto-compute $10 × payroll rows in scope; manual customValue overrides
+        if (officeScope === 'King J') {
+          return field.customValue != null ? field.customValue : rowsForDataset('payroll').length * 10;
+        }
+        // All other offices: auto-zero when no payroll rows, otherwise use manual value
         const hasPayrollInScope = rowsForDataset('payroll').length > 0;
         if (!hasPayrollInScope) return 0;
       }
