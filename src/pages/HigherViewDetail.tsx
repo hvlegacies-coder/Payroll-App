@@ -212,6 +212,7 @@ export default function OfficeSummary() {
       setSavedSnapshot('[]');
       return;
     }
+    setTables([]);
     setLoading(true);
     supabase
       .from('office_summary_configs')
