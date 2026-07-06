@@ -541,10 +541,10 @@ export function SummaryTable({ config, onChange, onDelete, officeScope, siblingT
       if ((field.label || '').trim().toLowerCase() === 'agi') {
         return computeAutoField('__auto_agi__', field.filters);
       }
-      // "Processing Fee" uses manual customValue when set; otherwise auto-computes as $10 × payroll rows in scope
+      // Auto-zero "Processing Fee" when this office has no client payroll rows for the active week
       if ((field.label || '').trim().toLowerCase() === 'processing fee') {
-        if (field.customValue != null) return field.customValue;
-        return rowsForDataset('payroll').length * 10;
+        const hasPayrollInScope = rowsForDataset('payroll').length > 0;
+        if (!hasPayrollInScope) return 0;
       }
       return field.customValue ?? 0;
     }
