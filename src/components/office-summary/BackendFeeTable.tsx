@@ -61,6 +61,7 @@ const EFIN_TILE_BY_OFFICE: Record<string, string> = {
   'D & D': '381268',
   'PowerPlay': '381623',
   'S & C': '385634',
+  'King J': '741288',
 };
 
 // Fallback EFIN used by the EFIN-filtered tiles when the primary EFIN has zero
