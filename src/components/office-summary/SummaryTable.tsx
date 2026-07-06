@@ -541,8 +541,9 @@ export function SummaryTable({ config, onChange, onDelete, officeScope, siblingT
       if ((field.label || '').trim().toLowerCase() === 'agi') {
         return computeAutoField('__auto_agi__', field.filters);
       }
-      // "Processing Fee" auto-computes as $10 × number of payroll rows in scope
+      // "Processing Fee" uses manual customValue when set; otherwise auto-computes as $10 × payroll rows in scope
       if ((field.label || '').trim().toLowerCase() === 'processing fee') {
+        if (field.customValue != null) return field.customValue;
         return rowsForDataset('payroll').length * 10;
       }
       return field.customValue ?? 0;
