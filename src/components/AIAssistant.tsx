@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Bot, Mic, MicOff, Send, Volume2, VolumeX, X } from 'lucide-react';
+import { Bot, Mic, MicOff, Send, Volume2, VolumeX, X } from 'lucide-react'; // Bot used in panel header
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
@@ -57,6 +57,12 @@ export function AIAssistant() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, status]);
+
+  useEffect(() => {
+    const handler = () => setOpen(true);
+    window.addEventListener('open-ai-assistant', handler);
+    return () => window.removeEventListener('open-ai-assistant', handler);
+  }, []);
 
   function handleClose() {
     stopListening();
@@ -174,17 +180,6 @@ export function AIAssistant() {
 
   return (
     <>
-      {/* Floating trigger button */}
-      <button
-        onClick={() => setOpen(true)}
-        aria-label="Open AI Assistant"
-        className="fixed right-4 z-50 flex items-center gap-2 px-4 h-11 rounded-full bg-primary text-primary-foreground shadow-xl hover:bg-primary/90 active:scale-95 transition-all text-sm font-medium"
-        style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 5rem)' }}
-      >
-        <Bot className="h-4 w-4 shrink-0" />
-        <span>Ask AI</span>
-      </button>
-
       <Sheet open={open} onOpenChange={(v) => { if (!v) handleClose(); }}>
         <SheetContent
           side="right"
