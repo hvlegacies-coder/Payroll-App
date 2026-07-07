@@ -34,21 +34,36 @@ export default function PreparerLogin() {
     if (password.length < 6) { setError('Password must be at least 6 characters.'); return; }
     setError(''); setLoading(true);
     try {
-      // Check if PTIN exists in preparers table
-      const { data: preparerData } = await supabase.from('preparers').select('contractor, ptin').eq('ptin', ptin.trim().toUpperCase()).limit(1);
-      if (!preparerData || preparerData.length === 0) { setError('PTIN not found. Please contact your office administrator.'); setLoading(false); return; }
-
+      // 1. Create auth account first
       const { data: authData, error: authError } = await supabase.auth.signUp({ email, password });
       if (authError) throw authError;
 
+      // 2. Activate session so authenticated RLS policies apply
+      if (authData.session) {
+        await supabase.auth.setSession(authData.session);
+      }
+
+      // 3. Now check PTIN with authenticated session
+      const normalizedPtin = ptin.trim().toUpperCase();
+      const { data: preparerData } = await supabase
+        .from('preparers')
+        .select('contractor, ptin')
+        .eq('ptin', normalizedPtin)
+        .limit(1);
+
+      if (!preparerData || preparerData.length === 0) {
+        // Sign out and report — auth account exists but is unlinked
+        await supabase.auth.signOut();
+        setError('PTIN not found. Please check your PTIN and try again with a different email, or contact your administrator.');
+        setLoading(false);
+        return;
+      }
+
+      // 4. Link the auth user to the preparer record
       if (authData.user) {
-        // If a session was returned (email confirmation disabled), activate it so RLS auth.uid() works
-        if (authData.session) {
-          await supabase.auth.setSession(authData.session);
-        }
         const { error: linkError } = await supabase.from('preparer_users').insert({
           user_id: authData.user.id,
-          ptin: ptin.trim().toUpperCase(),
+          ptin: normalizedPtin,
           contractor_name: preparerData[0].contractor,
         });
         if (linkError) {
