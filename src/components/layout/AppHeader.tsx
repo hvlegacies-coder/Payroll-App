@@ -1,4 +1,4 @@
-import { Search, ChevronDown, Sun, Moon, Plus, Trash2, Bot } from 'lucide-react';
+import { Search, ChevronDown, Sun, Moon, Plus, Trash2, Headset } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -140,7 +140,7 @@ export function AppHeader() {
           title="Ask AI"
           onClick={() => window.dispatchEvent(new CustomEvent('open-ai-assistant'))}
         >
-          <Bot className="h-4 w-4" />
+          <Headset className="h-4 w-4" />
         </Button>
         <Button variant="ghost" size="icon" className="h-9 w-9 text-destructive hover:text-destructive" title="Delete selected payroll week" onClick={() => setDeleteOpen(true)} disabled={!selectedWeek}>
           <Trash2 className="h-4 w-4" />

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Bot, Mic, MicOff, Send, Volume2, VolumeX, X } from 'lucide-react'; // Bot used in panel header
+import { Headset, Mic, MicOff, Send, Volume2, VolumeX } from 'lucide-react';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
@@ -190,7 +190,7 @@ export function AIAssistant() {
           <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
             <div className="flex items-center gap-2">
               <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center">
-                <Bot className="h-4 w-4 text-primary" />
+                <Headset className="h-4 w-4 text-primary" />
               </div>
               <div>
                 <p className="text-sm font-semibold leading-none">AI Assistant</p>
@@ -208,9 +208,6 @@ export function AIAssistant() {
               >
                 {ttsEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4 text-muted-foreground" />}
               </Button>
-              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleClose} aria-label="Close">
-                <X className="h-4 w-4" />
-              </Button>
             </div>
           </div>
 
@@ -219,7 +216,7 @@ export function AIAssistant() {
             {messages.length === 0 && status !== 'thinking' && (
               <div className="flex flex-col items-center justify-center h-full py-12 text-center">
                 <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-3">
-                  <Bot className="h-6 w-6 text-primary" />
+                  <Headset className="h-6 w-6 text-primary" />
                 </div>
                 <p className="text-sm font-medium mb-1">Ask me anything</p>
                 <p className="text-xs text-muted-foreground max-w-[240px]">
