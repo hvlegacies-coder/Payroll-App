@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Headset, Mic, MicOff, Send, Volume2, VolumeX } from 'lucide-react';
+import { Headset, Mic, MicOff, Send, Volume2, VolumeX, X } from 'lucide-react';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
@@ -49,7 +49,7 @@ export function AIAssistant() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [status, setStatus] = useState<Status>('idle');
-  const [ttsEnabled, setTtsEnabled] = useState(false);
+  const [ttsEnabled, setTtsEnabled] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const recognitionRef = useRef<any>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -183,7 +183,7 @@ export function AIAssistant() {
       <Sheet open={open} onOpenChange={(v) => { if (!v) handleClose(); }}>
         <SheetContent
           side="right"
-          className="w-full sm:w-[400px] p-0 flex flex-col gap-0"
+          className="w-full sm:w-[400px] p-0 flex flex-col gap-0 [&>button]:hidden"
           onInteractOutside={(e) => e.preventDefault()}
         >
           {/* Header */}
@@ -193,8 +193,8 @@ export function AIAssistant() {
                 <Headset className="h-4 w-4 text-primary" />
               </div>
               <div>
-                <p className="text-sm font-semibold leading-none">AI Assistant</p>
-                <p className="text-[10px] text-muted-foreground mt-0.5">Ask about app logic</p>
+                <p className="text-sm font-semibold leading-none">HV Assistant</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">Say "Hey HV" to get started</p>
               </div>
             </div>
             <div className="flex items-center gap-1">
@@ -208,6 +208,9 @@ export function AIAssistant() {
               >
                 {ttsEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4 text-muted-foreground" />}
               </Button>
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleClose} aria-label="Close">
+                <X className="h-4 w-4" />
+              </Button>
             </div>
           </div>
 
@@ -220,7 +223,7 @@ export function AIAssistant() {
                 </div>
                 <p className="text-sm font-medium mb-1">Ask me anything</p>
                 <p className="text-xs text-muted-foreground max-w-[240px]">
-                  I know everything about how this app works — formulas, fields, offices, and more.
+                  Hey! I'm HV — ask me anything about how this app works.
                 </p>
                 <div className="mt-4 flex flex-col gap-1.5 w-full max-w-[280px]">
                   {[
