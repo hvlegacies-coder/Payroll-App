@@ -203,15 +203,19 @@ export async function runPayrollVerification(weekLabel: string): Promise<Verific
     const ptin = getField(row, 'PTIN').toLowerCase();
     const ssn = getField(row, 'Taxpayer SSN') || getField(row, 'TAXPAYER_SSN');
     const fee = toNum(getField(row, 'Received Tax Prep Fee(s)') || getField(row, 'RECEIVED_TAX_PREP_FEE_S_'));
+    const lastName = getField(row, 'Taxpayer Last Name') || getField(row, 'TAXPAYER_LAST_NAME');
+    const firstName = getField(row, 'Taxpayer First Name') || getField(row, 'TAXPAYER_FIRST_NAME');
+    const clientName = [firstName, lastName].filter(Boolean).join(' ') || '';
     const rowLabel = ptin ? `PTIN ${ptin.toUpperCase()}` : `Row ${i + 1}`;
+    const clientLabel = clientName ? ` — ${clientName}` : '';
 
     if (!ptin) {
       missingPtinRows.push(i + 1);
     } else {
       ptinCounts[ptin] = (ptinCounts[ptin] ?? 0) + 1;
     }
-    if (!ssn) missingSSNList.push(rowLabel);
-    if (fee === 0) zeroFeeList.push(`Row ${i + 1} — ${rowLabel} — $0 fee`);
+    if (!ssn) missingSSNList.push(`${rowLabel}${clientLabel}`);
+    if (fee === 0) zeroFeeList.push(`Row ${i + 1} — ${rowLabel}${clientLabel} — $0 fee`);
   }
 
   const unmatchedPtins: string[] = [];
