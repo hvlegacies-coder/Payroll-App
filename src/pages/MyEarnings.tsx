@@ -71,8 +71,24 @@ export default function MyEarnings() {
     setUserEmail(user.email || '');
 
     // Get linked PTIN
-    const { data: link } = await supabase.from('preparer_users').select('ptin, contractor_name').eq('user_id', user.id).single();
-    if (!link) { navigate('/preparer-login'); return; }
+    const { data: link, error: linkErr } = await supabase
+      .from('preparer_users')
+      .select('ptin, contractor_name')
+      .eq('user_id', user.id)
+      .maybeSingle();
+    if (linkErr) {
+      console.error('preparer_users lookup error:', linkErr);
+      toast.error(`Failed to load preparer record: ${linkErr.message}`);
+      await supabase.auth.signOut();
+      navigate('/preparer-login');
+      return;
+    }
+    if (!link) {
+      toast.error('No preparer record linked to this account. Please register again.');
+      await supabase.auth.signOut();
+      navigate('/preparer-login');
+      return;
+    }
     setPreparerName(link.contractor_name || link.ptin);
 
     // Show ALL payroll weeks from the owner view in the dropdown.

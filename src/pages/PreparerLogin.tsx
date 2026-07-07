@@ -20,8 +20,37 @@ export default function PreparerLogin() {
     if (!email || !password) { setError('Please fill in all fields.'); return; }
     setError(''); setLoading(true);
     try {
-      const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
-      if (authError) throw authError;
+      const { data: signInData, error: authError } = await supabase.auth.signInWithPassword({ email, password });
+      if (authError) {
+        if (authError.message.toLowerCase().includes('confirm')) {
+          setError('Please confirm your email address first. Check your inbox for a confirmation link.');
+        } else if (authError.message.toLowerCase().includes('invalid') || authError.message.toLowerCase().includes('credentials')) {
+          setError('Incorrect email or password. Please try again.');
+        } else {
+          setError(authError.message);
+        }
+        return;
+      }
+      if (!signInData.user) { setError('Sign-in failed: no user returned. Please try again.'); return; }
+
+      // Verify the preparer link exists before navigating
+      const { data: link, error: linkErr } = await supabase
+        .from('preparer_users')
+        .select('ptin')
+        .eq('user_id', signInData.user.id)
+        .maybeSingle();
+
+      if (linkErr) {
+        setError(`Could not verify your account: ${linkErr.message}. Contact your administrator.`);
+        await supabase.auth.signOut();
+        return;
+      }
+      if (!link) {
+        setError('Your account is not linked to a preparer record. Please register again or contact your administrator.');
+        await supabase.auth.signOut();
+        return;
+      }
+
       navigate('/my-earnings');
     } catch (err: any) {
       setError(err.message || 'Login failed');
