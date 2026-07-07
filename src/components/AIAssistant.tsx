@@ -129,10 +129,11 @@ export function AIAssistant() {
       <button
         onClick={() => setOpen(true)}
         aria-label="Open AI Assistant"
-        className="fixed right-4 z-40 w-12 h-12 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center hover:bg-primary/90 active:scale-95 transition-all"
-        style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 5.5rem)' }}
+        className="fixed right-4 z-50 flex items-center gap-2 px-4 h-11 rounded-full bg-primary text-primary-foreground shadow-xl hover:bg-primary/90 active:scale-95 transition-all text-sm font-medium"
+        style={{ bottom: 'calc(env(safe-area-inset-bottom, 0px) + 5rem)' }}
       >
-        <Bot className="h-5 w-5" />
+        <Bot className="h-4 w-4 shrink-0" />
+        <span>Ask AI</span>
       </button>
 
       <Sheet open={open} onOpenChange={(v) => { if (!v) handleClose(); }}>
