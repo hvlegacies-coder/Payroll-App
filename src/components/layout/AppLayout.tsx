@@ -2,6 +2,7 @@ import { Outlet, Navigate, useLocation } from 'react-router-dom';
 import { AppSidebar } from './AppSidebar';
 import { AppHeader } from './AppHeader';
 import { BottomNav } from './BottomNav';
+import { AIAssistant } from '@/components/AIAssistant';
 import { cn } from '@/lib/utils';
 
 export function AppLayout() {
@@ -20,6 +21,7 @@ export function AppLayout() {
         </main>
       </div>
       <BottomNav />
+      <AIAssistant />
     </div>
   );
 }
