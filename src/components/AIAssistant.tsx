@@ -95,7 +95,10 @@ export function AIAssistant() {
         body: JSON.stringify({ messages: newMessages }),
       });
 
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) {
+        const errText = await res.text().catch(() => '');
+        throw new Error(`HTTP ${res.status}: ${errText.slice(0, 200)}`);
+      }
       const data = await res.json();
       const reply: string = data?.reply ?? "Sorry, I couldn't get a response. Please try again.";
       const updated: Message[] = [...newMessages, { role: 'assistant', content: reply }];
