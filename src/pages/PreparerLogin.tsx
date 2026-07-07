@@ -35,22 +35,30 @@ export default function PreparerLogin() {
     setError(''); setLoading(true);
     try {
       // Check if PTIN exists in preparers table
-      const { data: preparerData } = await supabase.from('preparers').select('contractor, ptin').eq('ptin', ptin.trim()).limit(1);
+      const { data: preparerData } = await supabase.from('preparers').select('contractor, ptin').eq('ptin', ptin.trim().toUpperCase()).limit(1);
       if (!preparerData || preparerData.length === 0) { setError('PTIN not found. Please contact your office administrator.'); setLoading(false); return; }
 
       const { data: authData, error: authError } = await supabase.auth.signUp({ email, password });
       if (authError) throw authError;
 
       if (authData.user) {
-        // Link user to preparer
+        // If a session was returned (email confirmation disabled), activate it so RLS auth.uid() works
+        if (authData.session) {
+          await supabase.auth.setSession(authData.session);
+        }
         const { error: linkError } = await supabase.from('preparer_users').insert({
           user_id: authData.user.id,
-          ptin: ptin.trim(),
+          ptin: ptin.trim().toUpperCase(),
           contractor_name: preparerData[0].contractor,
         });
-        if (linkError) { setError('Account created but linking failed. Contact admin.'); setLoading(false); return; }
+        if (linkError) {
+          console.error('preparer_users link error:', linkError);
+          setError(`Linking failed: ${linkError.message}`);
+          setLoading(false);
+          return;
+        }
       }
-      setSuccess('Account created! Please check your email to verify, then log in.');
+      setSuccess('Account created! You can now sign in.');
       setIsSignUp(false);
     } catch (err: any) {
       setError(err.message || 'Sign up failed');
