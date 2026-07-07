@@ -109,10 +109,11 @@ export function AIAssistant() {
         window.speechSynthesis?.speak(new SpeechSynthesisUtterance(reply));
       }
     } catch (err: any) {
-      setError(err?.message || 'Failed to reach the AI service. Check your API key setup.');
+      const detail = err?.message || 'Unknown error';
+      setError(detail);
       setMessages([...newMessages, {
         role: 'assistant',
-        content: 'Sorry, I encountered an error. Please check the setup instructions and try again.',
+        content: `Error: ${detail}`,
       }]);
     } finally {
       setStatus('idle');

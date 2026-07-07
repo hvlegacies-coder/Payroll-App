@@ -1,5 +1,7 @@
 export const config = { runtime: 'edge' };
 
+declare const process: { env: Record<string, string | undefined> };
+
 const KNOWLEDGE_BASE = `
 You are an AI assistant embedded in Higher View Taxes — a payroll operations platform used by tax office managers and staff. Your job is to answer questions about how the app works, what fields mean, how calculations are done, and where to find things. Always answer in plain English. Be concise but complete. Use specific numbers and formulas when relevant.
 
