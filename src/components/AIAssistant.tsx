@@ -4,7 +4,6 @@ import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { supabase } from '@/integrations/supabase/client';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -90,12 +89,14 @@ export function AIAssistant() {
     setStatus('thinking');
 
     try {
-      const { data, error: fnError } = await supabase.functions.invoke('ai-assistant', {
-        body: { messages: newMessages },
+      const res = await fetch('/api/ai-assistant', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: newMessages }),
       });
 
-      if (fnError) throw fnError;
-
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
       const reply: string = data?.reply ?? "Sorry, I couldn't get a response. Please try again.";
       const updated: Message[] = [...newMessages, { role: 'assistant', content: reply }];
       setMessages(updated);
