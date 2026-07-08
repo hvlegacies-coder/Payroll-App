@@ -12,7 +12,7 @@ import {
   ExternalLink, Headset, Lock, CalendarDays, Sun, Moon, Monitor,
   Plus, CheckCircle2, Loader2, Shield, KeyRound, UserPlus, Mail,
   ChevronDown, ChevronRight, Eye, EyeOff, RefreshCw, Building2, UserCheck,
-  GitBranch, X,
+  GitBranch, X, Search,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
@@ -93,6 +93,22 @@ export default function SettingsPage() {
   const [addSubUserSlug, setAddSubUserSlug] = useState<string | null>(null);
   const [newSubUsername, setNewSubUsername] = useState('');
   const [savingSubUser, setSavingSubUser] = useState(false);
+
+  // Add new sub-account
+  const [showAddSubAccount, setShowAddSubAccount] = useState(false);
+  const [newSubAcctName, setNewSubAcctName] = useState('');
+  const [savingSubAcct, setSavingSubAcct] = useState(false);
+
+  // Direct add-account for preparers (top-level, without scrolling to a row)
+  const [showAddPrepAccount, setShowAddPrepAccount] = useState(false);
+  const [directPrepPtin, setDirectPrepPtin] = useState('');
+  const [directPrepEmail, setDirectPrepEmail] = useState('');
+  const [directPrepPassword, setDirectPrepPassword] = useState('');
+  const [directPrepPwShow, setDirectPrepPwShow] = useState(false);
+  const [savingDirectPrep, setSavingDirectPrep] = useState(false);
+
+  // Credentials search
+  const [credSearch, setCredSearch] = useState('');
 
   useEffect(() => {
     if (tab === 'Credentials') {
@@ -273,6 +289,64 @@ export default function SettingsPage() {
       toast.error('Failed to create login: ' + err.message);
     } finally {
       setSavingPrepLogin(false);
+    }
+  };
+
+  const createPreparerLoginDirect = async () => {
+    const ptin = directPrepPtin.trim().toUpperCase();
+    if (!ptin) { toast.error('PTIN is required.'); return; }
+    if (!directPrepEmail.trim()) { toast.error('Email is required.'); return; }
+    if (directPrepPassword.length < 6) { toast.error('Password must be at least 6 characters.'); return; }
+    setSavingDirectPrep(true);
+    try {
+      const prep = preparers.find(p => p.ptin === ptin);
+      const contractorName = prep?.contractor ?? ptin;
+      const { data, error } = await supabase.auth.signUp({
+        email: directPrepEmail.trim(),
+        password: directPrepPassword,
+      });
+      if (error) throw error;
+      if (data.user?.id) {
+        const { error: linkErr } = await supabase.from('preparer_users').insert({
+          user_id: data.user.id,
+          ptin,
+          contractor_name: contractorName,
+        });
+        if (linkErr) toast.error(`Account created but linking failed: ${linkErr.message}`);
+      }
+      toast.success(`Login created for PTIN ${ptin}`);
+      setShowAddPrepAccount(false);
+      setDirectPrepPtin('');
+      setDirectPrepEmail('');
+      setDirectPrepPassword('');
+    } catch (err: any) {
+      toast.error('Failed to create login: ' + err.message);
+    } finally {
+      setSavingDirectPrep(false);
+    }
+  };
+
+  const createSubAccount = async () => {
+    if (!newSubAcctName.trim()) { toast.error('Name is required.'); return; }
+    setSavingSubAcct(true);
+    try {
+      const slug = newSubAcctName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      const { data: hvAcct } = await (supabase as any)
+        .from('accounts').select('id').eq('slug', 'higher-view').maybeSingle();
+      const { error } = await (supabase as any).from('accounts').insert({
+        name: newSubAcctName.trim(),
+        slug,
+        parent_account_id: hvAcct?.id ?? null,
+      });
+      if (error) throw error;
+      toast.success(`Sub-account "${newSubAcctName.trim()}" created.`);
+      setNewSubAcctName('');
+      setShowAddSubAccount(false);
+      await loadSubAccounts();
+    } catch (err: any) {
+      toast.error('Failed to create sub-account: ' + err.message);
+    } finally {
+      setSavingSubAcct(false);
     }
   };
 
@@ -510,6 +584,25 @@ export default function SettingsPage() {
                 <p className="text-xs text-muted-foreground">Manage login accounts for owners, admins, and preparers. Use "Send Reset Email" to let them set their own password.</p>
               </div>
 
+              {/* ── Search bar ── */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                <Input
+                  value={credSearch}
+                  onChange={e => setCredSearch(e.target.value)}
+                  placeholder="Search by name, email, PTIN, username, or office…"
+                  className="pl-9 text-sm"
+                />
+                {credSearch && (
+                  <button
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    onClick={() => setCredSearch('')}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+
               {/* ── Owner & Admin Accounts ── */}
               <section className="space-y-3">
                 <div className="flex items-center justify-between">
@@ -570,7 +663,11 @@ export default function SettingsPage() {
                 )}
 
                 <div className="space-y-1.5">
-                  {OWNER_ACCOUNTS.map(acct => {
+                  {OWNER_ACCOUNTS.filter(acct => {
+                    if (!credSearch) return true;
+                    const q = credSearch.toLowerCase();
+                    return acct.label.toLowerCase().includes(q) || acct.email.toLowerCase().includes(q) || acct.username.toLowerCase().includes(q);
+                  }).map(acct => {
                     const isResetting = resetingEmail === acct.email;
                     const isPwOpen = ownerPwId === acct.username;
                     return (
@@ -655,11 +752,83 @@ export default function SettingsPage() {
                     <span className="text-sm font-semibold">Preparer Login Accounts</span>
                     <Badge variant="outline" className="text-[10px]">{preparers.length}</Badge>
                   </div>
-                  <Button size="sm" variant="ghost" className="gap-1.5 h-7 text-xs" onClick={loadPreparers} disabled={loadingPreparers}>
-                    {loadingPreparers ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                    Refresh
-                  </Button>
+                  <div className="flex items-center gap-1.5">
+                    <Button size="sm" variant="outline" className="gap-1.5 h-7 text-xs" onClick={() => { setShowAddPrepAccount(!showAddPrepAccount); setDirectPrepPtin(''); setDirectPrepEmail(''); setDirectPrepPassword(''); }}>
+                      <UserPlus className="h-3.5 w-3.5" />
+                      Add Account
+                    </Button>
+                    <Button size="sm" variant="ghost" className="gap-1.5 h-7 text-xs" onClick={loadPreparers} disabled={loadingPreparers}>
+                      {loadingPreparers ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                      Refresh
+                    </Button>
+                  </div>
                 </div>
+
+                {/* Direct add-preparer-account form */}
+                {showAddPrepAccount && (
+                  <div className="border border-border rounded-lg p-4 space-y-3 bg-muted/20">
+                    <p className="text-xs font-semibold flex items-center gap-1.5"><KeyRound className="h-3.5 w-3.5" /> New Preparer Login Account</p>
+                    <div>
+                      <label className="text-xs text-muted-foreground">PTIN *</label>
+                      <div className="relative mt-1">
+                        <Input
+                          list="ptin-list"
+                          value={directPrepPtin}
+                          onChange={e => setDirectPrepPtin(e.target.value)}
+                          placeholder="Type or select PTIN (e.g. P01234567)"
+                          className="text-sm"
+                        />
+                        <datalist id="ptin-list">
+                          {preparers.map(p => (
+                            <option key={p.ptin} value={p.ptin}>{p.contractor} — {p.ptin}</option>
+                          ))}
+                        </datalist>
+                      </div>
+                      {directPrepPtin && preparers.find(p => p.ptin === directPrepPtin.trim().toUpperCase()) && (
+                        <p className="text-[10px] text-primary mt-1">
+                          {preparers.find(p => p.ptin === directPrepPtin.trim().toUpperCase())?.contractor}
+                        </p>
+                      )}
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground">Email *</label>
+                      <Input
+                        type="email"
+                        value={directPrepEmail}
+                        onChange={e => setDirectPrepEmail(e.target.value)}
+                        placeholder="preparer@example.com"
+                        className="mt-1 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground">Temporary Password *</label>
+                      <div className="relative mt-1">
+                        <Input
+                          type={directPrepPwShow ? 'text' : 'password'}
+                          value={directPrepPassword}
+                          onChange={e => setDirectPrepPassword(e.target.value)}
+                          placeholder="Min. 6 characters"
+                          className="text-sm pr-9"
+                        />
+                        <button
+                          type="button"
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                          onClick={() => setDirectPrepPwShow(!directPrepPwShow)}
+                        >
+                          {directPrepPwShow ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button size="sm" onClick={createPreparerLoginDirect} disabled={savingDirectPrep} className="gap-1.5">
+                        {savingDirectPrep ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UserPlus className="h-3.5 w-3.5" />}
+                        {savingDirectPrep ? 'Creating…' : 'Create Account'}
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => setShowAddPrepAccount(false)}>Cancel</Button>
+                    </div>
+                  </div>
+                )}
+
                 <p className="text-xs text-muted-foreground">
                   Each preparer below can have a login account. Click "Create Login" to set up their email + password. They will log in at the Preparer Login screen with their email and PTIN.
                 </p>
@@ -675,7 +844,11 @@ export default function SettingsPage() {
                 )}
 
                 <div className="space-y-1.5">
-                  {preparers.map(prep => {
+                  {preparers.filter(prep => {
+                    if (!credSearch) return true;
+                    const q = credSearch.toLowerCase();
+                    return prep.contractor.toLowerCase().includes(q) || prep.ptin.toLowerCase().includes(q) || (prep.main_office || '').toLowerCase().includes(q);
+                  }).map(prep => {
                     const isOpen = prepLoginId === prep.id;
                     const isResetting = resetingEmail === prep.id;
                     return (
@@ -775,11 +948,50 @@ export default function SettingsPage() {
                     <span className="text-sm font-semibold">Sub-Account Login Users</span>
                     <Badge variant="outline" className="text-[10px]">{subAccounts.length}</Badge>
                   </div>
-                  <Button size="sm" variant="ghost" className="gap-1.5 h-7 text-xs" onClick={loadSubAccounts} disabled={loadingSubAccounts}>
-                    {loadingSubAccounts ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                    Refresh
-                  </Button>
+                  <div className="flex items-center gap-1.5">
+                    <Button size="sm" variant="outline" className="gap-1.5 h-7 text-xs" onClick={() => { setShowAddSubAccount(!showAddSubAccount); setNewSubAcctName(''); }}>
+                      <Plus className="h-3.5 w-3.5" />
+                      Add Account
+                    </Button>
+                    <Button size="sm" variant="ghost" className="gap-1.5 h-7 text-xs" onClick={loadSubAccounts} disabled={loadingSubAccounts}>
+                      {loadingSubAccounts ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                      Refresh
+                    </Button>
+                  </div>
                 </div>
+
+                {/* New sub-account form */}
+                {showAddSubAccount && (
+                  <div className="border border-border rounded-lg p-4 space-y-3 bg-muted/20">
+                    <p className="text-xs font-semibold flex items-center gap-1.5"><GitBranch className="h-3.5 w-3.5" /> New Sub-Account</p>
+                    <div>
+                      <label className="text-xs text-muted-foreground">Account Name *</label>
+                      <Input
+                        value={newSubAcctName}
+                        onChange={e => setNewSubAcctName(e.target.value)}
+                        placeholder="e.g. Tax Champions"
+                        className="mt-1 text-sm"
+                        onKeyDown={e => { if (e.key === 'Enter') createSubAccount(); }}
+                      />
+                      {newSubAcctName.trim() && (
+                        <p className="text-[10px] text-muted-foreground mt-1">
+                          Slug: <span className="font-mono">{newSubAcctName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}</span>
+                        </p>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">
+                      After creating, use "Add Username" on the new account to add login usernames.
+                    </p>
+                    <div className="flex gap-2">
+                      <Button size="sm" onClick={createSubAccount} disabled={savingSubAcct} className="gap-1.5">
+                        {savingSubAcct ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+                        {savingSubAcct ? 'Creating…' : 'Create Account'}
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => setShowAddSubAccount(false)}>Cancel</Button>
+                    </div>
+                  </div>
+                )}
+
                 <p className="text-xs text-muted-foreground">
                   Sub-account owners log in at <span className="font-mono">/login/sub</span> with their username and the shared sub-account password. Each office can have multiple usernames.
                 </p>
@@ -794,7 +1006,11 @@ export default function SettingsPage() {
                   {!loadingSubAccounts && subAccounts.length === 0 && (
                     <p className="text-xs text-muted-foreground text-center py-4">No sub-accounts found. Click Refresh to set them up.</p>
                   )}
-                  {subAccounts.map(acct => {
+                  {subAccounts.filter(acct => {
+                    if (!credSearch) return true;
+                    const q = credSearch.toLowerCase();
+                    return acct.name.toLowerCase().includes(q) || acct.slug.toLowerCase().includes(q) || acct.users.some(u => u.toLowerCase().includes(q));
+                  }).map(acct => {
                     const isAdding = addSubUserSlug === acct.slug;
                     return (
                       <div key={acct.id} className="rounded-lg border border-border overflow-hidden">
