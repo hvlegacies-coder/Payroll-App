@@ -29,17 +29,20 @@ const SUB_ACCOUNT_DEFS = [
 
 // Mirrors the ownerMap in Login.tsx — deduplicated by email
 const OWNER_ACCOUNTS = [
-  { username: 'payroll',    email: 'payroll@hvtaxprep.com',    label: 'Payroll (Admin)' },
-  { username: 'michael',    email: 'michael@hvtaxprep.com',    label: 'Michael' },
-  { username: 'olbrown',    email: 'olbrown@hvtaxprep.com',    label: 'OL Brown' },
-  { username: 'julius',     email: 'julius@hvtaxprep.com',     label: 'Julius' },
-  { username: 'higherview', email: 'higherview@hvtaxprep.com', label: 'Higher View Office' },
-  { username: 'd&d',        email: 'dd@hvtaxprep.com',         label: 'D&D Office' },
-  { username: 'powerplay',  email: 'powerplay@hvtaxprep.com',  label: 'PowerPlay Office' },
-  { username: 's&c',        email: 'sc@hvtaxprep.com',         label: 'S&C Office' },
-  { username: 'mainevent',  email: 'mainevent@hvtaxprep.com',  label: 'Main Event Office' },
-  { username: 'kingj',      email: 'kingj@hvtaxprep.com',      label: 'King J Office' },
+  { username: 'payroll',    email: 'payroll@hvtaxprep.com',    label: 'Payroll (Admin)',   group: 'admin' as const },
+  { username: 'michael',    email: 'michael@hvtaxprep.com',    label: 'Michael',           group: 'admin' as const },
+  { username: 'olbrown',    email: 'olbrown@hvtaxprep.com',    label: 'OL Brown',          group: 'admin' as const },
+  { username: 'julius',     email: 'julius@hvtaxprep.com',     label: 'Julius',            group: 'admin' as const },
+  { username: 'higherview', email: 'higherview@hvtaxprep.com', label: 'Higher View Office', group: 'owner' as const },
+  { username: 'd&d',        email: 'dd@hvtaxprep.com',         label: 'D&D Office',        group: 'owner' as const },
+  { username: 'powerplay',  email: 'powerplay@hvtaxprep.com',  label: 'PowerPlay Office',  group: 'owner' as const },
+  { username: 's&c',        email: 'sc@hvtaxprep.com',         label: 'S&C Office',        group: 'owner' as const },
+  { username: 'mainevent',  email: 'mainevent@hvtaxprep.com',  label: 'Main Event Office', group: 'owner' as const },
+  { username: 'kingj',      email: 'kingj@hvtaxprep.com',      label: 'King J Office',     group: 'owner' as const },
 ];
+
+const CRED_TABS = ['Owners', 'Admin', 'Preparers', 'Sub-Accounts'] as const;
+type CredTab = typeof CRED_TABS[number];
 
 type PrepRow = { id: string; ptin: string; contractor: string; main_office: string };
 
@@ -107,8 +110,9 @@ export default function SettingsPage() {
   const [directPrepPwShow, setDirectPrepPwShow] = useState(false);
   const [savingDirectPrep, setSavingDirectPrep] = useState(false);
 
-  // Credentials search
+  // Credentials search + sub-tab
   const [credSearch, setCredSearch] = useState('');
+  const [credTab, setCredTab] = useState<CredTab>('Owners');
 
   useEffect(() => {
     if (tab === 'Credentials') {
@@ -603,13 +607,31 @@ export default function SettingsPage() {
                 )}
               </div>
 
-              {/* ── Owner & Admin Accounts ── */}
+              {/* ── Credential sub-tabs ── */}
+              <div className="flex gap-1.5 border-b border-border pb-0 -mt-2">
+                {CRED_TABS.map(t => (
+                  <button
+                    key={t}
+                    onClick={() => setCredTab(t)}
+                    className={`px-3 py-2 text-xs font-medium border-b-2 -mb-px transition-colors ${
+                      credTab === t
+                        ? 'border-primary text-primary'
+                        : 'border-transparent text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
+
+              {/* ── Owner Accounts / Admin Accounts ── */}
+              {(credTab === 'Owners' || credTab === 'Admin') && (
               <section className="space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Building2 className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm font-semibold">Owner &amp; Admin Accounts</span>
-                    <Badge variant="outline" className="text-[10px]">{OWNER_ACCOUNTS.length}</Badge>
+                    {credTab === 'Admin' ? <Shield className="h-4 w-4 text-muted-foreground" /> : <Building2 className="h-4 w-4 text-muted-foreground" />}
+                    <span className="text-sm font-semibold">{credTab === 'Admin' ? 'Admin Accounts' : 'Owner Accounts'}</span>
+                    <Badge variant="outline" className="text-[10px]">{OWNER_ACCOUNTS.filter(a => a.group === (credTab === 'Admin' ? 'admin' : 'owner')).length}</Badge>
                   </div>
                   <Button size="sm" variant="outline" className="gap-1.5 h-7 text-xs" onClick={() => setShowAddOwner(!showAddOwner)}>
                     <UserPlus className="h-3.5 w-3.5" />
@@ -663,7 +685,7 @@ export default function SettingsPage() {
                 )}
 
                 <div className="space-y-1.5">
-                  {OWNER_ACCOUNTS.filter(acct => {
+                  {OWNER_ACCOUNTS.filter(acct => acct.group === (credTab === 'Admin' ? 'admin' : 'owner')).filter(acct => {
                     if (!credSearch) return true;
                     const q = credSearch.toLowerCase();
                     return acct.label.toLowerCase().includes(q) || acct.email.toLowerCase().includes(q) || acct.username.toLowerCase().includes(q);
@@ -743,8 +765,10 @@ export default function SettingsPage() {
                   })}
                 </div>
               </section>
+              )}
 
               {/* ── Preparer Accounts ── */}
+              {credTab === 'Preparers' && (
               <section className="space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -939,8 +963,10 @@ export default function SettingsPage() {
                   })}
                 </div>
               </section>
+              )}
 
               {/* ── Sub-Account Users ── */}
+              {credTab === 'Sub-Accounts' && (
               <section className="space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -1071,6 +1097,7 @@ export default function SettingsPage() {
                   })}
                 </div>
               </section>
+              )}
 
             </div>
           )}
