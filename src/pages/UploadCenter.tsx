@@ -35,8 +35,8 @@ const ALL_UPLOAD_TYPES = [
   { label: 'Payroll Report', displayLabel: 'Disbursement Listing', desc: 'Weekly disbursement listing from Drake — primary source of preparer pay, fees, and net checks issued for the week.', icon: FileText, accept: EXCEL_ACCEPTS, adminOnly: false },
   { label: 'Backend Money Report', desc: 'Backend office report capturing add-on fees, software fees, and net backend money owed back to each office.', icon: DollarSign, accept: EXCEL_ACCEPTS, adminOnly: false },
   { label: 'Advance Report', desc: 'Taxpayer advance / loan status report — tracks funded, pending, and denied taxpayer loans used to reconcile advances against disbursements.', icon: Shield, accept: EXCEL_ACCEPTS, adminOnly: true },
-  { label: 'Client Data Report', desc: 'Master client records and tax return data used to match taxpayers to preparers and validate fee, refund, and status fields (Report_1040returns-AcceptedSummary).', icon: Users, accept: EXCEL_ACCEPTS, adminOnly: false },
-  { label: 'Client Email Report', desc: 'Client contact enrichment file — adds verified emails and phone numbers to client records for earnings reports and notifications (Report_AddressandEmailSummary).', icon: Mail, accept: EXCEL_ACCEPTS, adminOnly: false },
+  { label: 'Client Data Report', desc: 'Master client records and tax return data used to match taxpayers to preparers and validate fee, refund, and status fields.', fileHint: 'Report_1040returns-AcceptedSummary', icon: Users, accept: EXCEL_ACCEPTS, adminOnly: false },
+  { label: 'Client Email Report', desc: 'Client contact enrichment file — adds verified emails and phone numbers to client records for earnings reports and notifications.', fileHint: 'Report_AddressandEmailSummary', icon: Mail, accept: EXCEL_ACCEPTS, adminOnly: false },
   { label: 'Fee Intercept Report', desc: 'SubOffice fee intercept / daily deposit summary — reconciles intercepted fees per sub-office against expected backend totals.', icon: DollarSign, accept: EXCEL_ACCEPTS, adminOnly: true },
 ];
 
@@ -403,6 +403,11 @@ export default function UploadCenter() {
                   <div className="flex-1 min-w-0">
                     <h3 className="text-sm font-medium">{(type as any).displayLabel || type.label}</h3>
                     <p className="text-xs text-muted-foreground mt-0.5">{type.desc}</p>
+                    {(type as any).fileHint && (
+                      <span className="inline-block text-[10px] font-mono font-medium px-1.5 py-0.5 mt-1.5 rounded bg-primary/10 border border-primary/30 text-primary">
+                        {(type as any).fileHint}
+                      </span>
+                    )}
                     <p className="text-[10px] text-muted-foreground mt-1">Accepts: {type.accept}</p>
                   </div>
                 </div>
