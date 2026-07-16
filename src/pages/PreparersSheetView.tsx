@@ -8,7 +8,7 @@ import { Plus, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { formatMoney } from '@/lib/utils';
 import { getActiveAccountId } from '@/contexts/AccountContext';
-import { PreparerEditDialog, type Preparer } from '@/components/preparers/PreparerEditDialog';
+import { PreparerEditDialog, FULL_FIELD_LABELS, type Preparer } from '@/components/preparers/PreparerEditDialog';
 
 // Mirrors the column order of the source PTIN List spreadsheet, plus a
 // Status column for the active/inactive flag that only exists in-app.
@@ -94,6 +94,7 @@ export default function PreparersSheetView() {
         editItem={editItem}
         onOpenChange={(open) => { if (!open) { setEditItem(null); setAddOpen(false); } }}
         onSaved={loadPreparers}
+        fields={FULL_FIELD_LABELS}
       />
     </div>
   );

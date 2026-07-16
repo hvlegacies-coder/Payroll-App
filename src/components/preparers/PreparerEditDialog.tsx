@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Loader2, Save } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
@@ -27,9 +28,10 @@ export interface Preparer {
   active: boolean;
 }
 
-// Fields shown in the Add/Edit dialog, also used to build the audit log's
-// field-level change summary (which field changed, old → new value).
-export const FIELD_LABELS: { key: keyof Preparer; label: string; type?: 'number' }[] = [
+export type PreparerFieldDef = { key: keyof Preparer; label: string; type?: 'number' | 'boolean' };
+
+// Condensed set shown on the Master PTIN (Preparers) page's dialog.
+export const FIELD_LABELS: PreparerFieldDef[] = [
   { key: 'ptin', label: 'PTIN' },
   { key: 'contractor', label: 'Contractor Name' },
   { key: 'tax_office', label: 'Office' },
@@ -38,8 +40,29 @@ export const FIELD_LABELS: { key: keyof Preparer; label: string; type?: 'number'
   { key: 'office_flat_rate', label: 'Office Flat Rate', type: 'number' },
 ];
 
-const PREPARER_AUDIT_FIELDS: { key: keyof Preparer; label: string }[] = [
-  ...FIELD_LABELS,
+// Full set — every column from the source PTIN List spreadsheet plus the
+// in-app Active flag — shown on the Master PTIN (Sheet View) page's dialog.
+export const FULL_FIELD_LABELS: PreparerFieldDef[] = [
+  { key: 'ptin', label: 'PTIN' },
+  { key: 'contractor', label: 'Contractor Name' },
+  { key: 'main_office', label: 'Main Office' },
+  { key: 'tax_office', label: 'Tax Office' },
+  { key: 'efin', label: 'EFIN' },
+  { key: 'efin2', label: 'EFIN2' },
+  { key: 'share_percent', label: 'Share %', type: 'number' },
+  { key: 'shared_efin_percent', label: 'Shared EFIN (%)', type: 'number' },
+  { key: 'roles', label: 'Roles' },
+  { key: 'preparer_client_percent', label: 'Preparer Client %', type: 'number' },
+  { key: 'office_flat_rate', label: 'Office Flat Rate', type: 'number' },
+  { key: 'landing_tab', label: 'Landing Tab' },
+  { key: 'availed_payroll', label: 'Availed Payroll', type: 'number' },
+  { key: 'active', label: 'Active', type: 'boolean' },
+];
+
+// Always diff every field regardless of which dialog variant made the edit,
+// so the audit log's change summary stays accurate either way.
+const PREPARER_AUDIT_FIELDS: PreparerFieldDef[] = [
+  ...FULL_FIELD_LABELS,
   { key: 'notes', label: 'Notes' },
 ];
 
@@ -54,9 +77,10 @@ interface Props {
   editItem: Preparer | null;
   onOpenChange: (open: boolean) => void;
   onSaved: () => void | Promise<void>;
+  fields?: PreparerFieldDef[];
 }
 
-export function PreparerEditDialog({ open, editItem, onOpenChange, onSaved }: Props) {
+export function PreparerEditDialog({ open, editItem, onOpenChange, onSaved, fields = FIELD_LABELS }: Props) {
   const [formData, setFormData] = useState<Omit<Preparer, 'id'>>(emptyPreparer);
   const [saving, setSaving] = useState(false);
 
@@ -104,15 +128,24 @@ export function PreparerEditDialog({ open, editItem, onOpenChange, onSaved }: Pr
           <DialogDescription>{editItem ? `Editing ${editItem.contractor}` : 'Fill in all fields to add a new preparer'}</DialogDescription>
         </DialogHeader>
         <div className="grid grid-cols-2 gap-4 max-h-[60vh] overflow-y-auto pr-1">
-          {FIELD_LABELS.map(f => (
+          {fields.map(f => (
             <div key={f.key}>
               <label className="text-xs font-medium text-muted-foreground">{f.label}{(f.key === 'ptin' || f.key === 'contractor') && ' *'}</label>
-              <Input
-                type={f.type || 'text'}
-                value={String(formData[f.key as keyof typeof formData] ?? '')}
-                onChange={e => setFormData(prev => ({ ...prev, [f.key]: f.type === 'number' ? parseFloat(e.target.value) || 0 : e.target.value }))}
-                className="mt-1 font-mono text-sm"
-              />
+              {f.type === 'boolean' ? (
+                <div className="mt-2">
+                  <Switch
+                    checked={!!formData[f.key as keyof typeof formData]}
+                    onCheckedChange={checked => setFormData(prev => ({ ...prev, [f.key]: checked }))}
+                  />
+                </div>
+              ) : (
+                <Input
+                  type={f.type || 'text'}
+                  value={String(formData[f.key as keyof typeof formData] ?? '')}
+                  onChange={e => setFormData(prev => ({ ...prev, [f.key]: f.type === 'number' ? parseFloat(e.target.value) || 0 : e.target.value }))}
+                  className="mt-1 font-mono text-sm"
+                />
+              )}
             </div>
           ))}
           <div className="col-span-2">
