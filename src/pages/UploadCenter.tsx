@@ -73,12 +73,15 @@ export default function UploadCenter() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [mainTab, setMainTab] = useState<'uploads' | 'verify'>('uploads');
+  const [showVerifyPrompt, setShowVerifyPrompt] = useState(false);
+  const [verifyRunTrigger, setVerifyRunTrigger] = useState(0);
+  const promptedWeeksRef = useRef<Set<string>>(new Set());
 
   const isAdmin = localStorage.getItem('hvt_user') === 'Payroll' || !localStorage.getItem('hvt_user');
   const uploadTypes = isAdmin ? ALL_UPLOAD_TYPES : ALL_UPLOAD_TYPES.filter(t => !t.adminOnly);
 
   // Load upload history from database (filtered by selected week)
-  const loadUploads = useCallback(async () => {
+  const loadUploads = useCallback(async (checkCompletion = false) => {
     if (!selectedWeek) return;
     const acct = (typeof window !== 'undefined') ? localStorage.getItem('hvt_account_id') : null;
     let q = supabase.from('uploads').select('*').eq('week_label', selectedWeek);
@@ -99,6 +102,15 @@ export default function UploadCenter() {
       rowsDetected: r.rows_detected,
       status: r.status,
     }));
+
+    if (checkCompletion) {
+      const distinctTypes = new Set(records.map(r => r.type));
+      const isComplete = ALL_UPLOAD_TYPES.every(t => distinctTypes.has(t.label));
+      if (isComplete && !promptedWeeksRef.current.has(selectedWeek)) {
+        promptedWeeksRef.current.add(selectedWeek);
+        setShowVerifyPrompt(true);
+      }
+    }
 
     setUploadHistory(records);
     setLoading(false);
@@ -288,7 +300,7 @@ export default function UploadCenter() {
       setState({ step: 'done', file: null, uploadType: '', parsed: null, validation: null, progress: 100 });
       const dupMsg = dupCount > 0 ? ` (${dupCount} duplicate(s) removed)` : '';
       toast.success(`${state.file.name} imported — ${rowsToInsert.length} rows saved${dupMsg}`);
-      loadUploads();
+      loadUploads(true);
 
       // Auto-(re)generate preparer weekly earnings whenever a Payroll Report is imported,
       // so MyEarnings stays in sync with the latest payroll data for this week.
@@ -414,7 +426,7 @@ export default function UploadCenter() {
 
         <TabsContent value="verify">
           <div className="bg-card rounded-xl border border-border p-6 shadow-card">
-            <VerificationPanel weekLabel={selectedWeek} />
+            <VerificationPanel weekLabel={selectedWeek} autoRunTrigger={verifyRunTrigger} />
           </div>
         </TabsContent>
       </Tabs>
@@ -564,6 +576,25 @@ export default function UploadCenter() {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {deleting ? 'Deleting...' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={showVerifyPrompt} onOpenChange={(o) => !o && setShowVerifyPrompt(false)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <ShieldCheck className="h-5 w-5 text-primary" /> All reports uploaded
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              All 6 report types have been uploaded for {selectedWeek}. Verify the details now before running payroll?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Later</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { setMainTab('verify'); setVerifyRunTrigger(t => t + 1); }}>
+              Verify Now
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -114,9 +114,10 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 interface Props {
   weekLabel: string | null;
+  autoRunTrigger?: number;
 }
 
-export function VerificationPanel({ weekLabel }: Props) {
+export function VerificationPanel({ weekLabel, autoRunTrigger }: Props) {
   const [report, setReport] = useState<VerificationReport | null>(null);
   const [running, setRunning] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
@@ -143,6 +144,13 @@ export function VerificationPanel({ weekLabel }: Props) {
       setRunning(false);
     }
   };
+
+  useEffect(() => {
+    if (autoRunTrigger) {
+      runVerification();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoRunTrigger]);
 
   // ── Auto-fix handlers ─────────────────────────────────────────────────────
 
