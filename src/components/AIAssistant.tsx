@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Headset, Mic, MicOff, Send, Volume2, VolumeX, X } from 'lucide-react';
+import { Headset, Lock, Mic, MicOff, Send, Volume2, VolumeX, X } from 'lucide-react';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
@@ -44,6 +44,9 @@ interface Message {
 
 type Status = 'idle' | 'listening' | 'thinking';
 
+const AI_ASSISTANT_PASSWORD = 'HV Legacies';
+const UNLOCK_SESSION_KEY = 'hv_ai_assistant_unlocked';
+
 export function AIAssistant() {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -51,6 +54,9 @@ export function AIAssistant() {
   const [status, setStatus] = useState<Status>('idle');
   const [ttsEnabled, setTtsEnabled] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [unlocked, setUnlocked] = useState(() => sessionStorage.getItem(UNLOCK_SESSION_KEY) === 'true');
+  const [pwInput, setPwInput] = useState('');
+  const [pwError, setPwError] = useState('');
   const recognitionRef = useRef<any>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -68,6 +74,20 @@ export function AIAssistant() {
     stopListening();
     window.speechSynthesis?.cancel();
     setOpen(false);
+    setPwInput('');
+    setPwError('');
+  }
+
+  function handleUnlock(e: React.FormEvent) {
+    e.preventDefault();
+    if (pwInput === AI_ASSISTANT_PASSWORD) {
+      setUnlocked(true);
+      sessionStorage.setItem(UNLOCK_SESSION_KEY, 'true');
+      setPwInput('');
+      setPwError('');
+    } else {
+      setPwError('Incorrect password.');
+    }
   }
 
   function stopListening() {
@@ -194,26 +214,56 @@ export function AIAssistant() {
               </div>
               <div>
                 <p className="text-sm font-semibold leading-none">HV Assistant</p>
-                <p className="text-[10px] text-muted-foreground mt-0.5">Say "Hey HV" to get started</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">
+                  {unlocked ? 'Say "Hey HV" to get started' : 'Password required to continue'}
+                </p>
               </div>
             </div>
             <div className="flex items-center gap-1">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => setTtsEnabled(v => !v)}
-                aria-label={ttsEnabled ? 'Disable voice output' : 'Enable voice output'}
-                title={ttsEnabled ? 'Voice output on' : 'Voice output off'}
-              >
-                {ttsEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4 text-muted-foreground" />}
-              </Button>
+              {unlocked && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => setTtsEnabled(v => !v)}
+                  aria-label={ttsEnabled ? 'Disable voice output' : 'Enable voice output'}
+                  title={ttsEnabled ? 'Voice output on' : 'Voice output off'}
+                >
+                  {ttsEnabled ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4 text-muted-foreground" />}
+                </Button>
+              )}
               <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleClose} aria-label="Close">
                 <X className="h-4 w-4" />
               </Button>
             </div>
           </div>
 
+          {!unlocked && (
+            <form onSubmit={handleUnlock} className="flex-1 flex flex-col items-center justify-center px-6 py-12 gap-3 text-center">
+              <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-1">
+                <Lock className="h-6 w-6 text-primary" />
+              </div>
+              <p className="text-sm font-medium">This assistant is password-protected</p>
+              <p className="text-xs text-muted-foreground max-w-[240px]">Enter the password to start chatting with HV Assistant.</p>
+              <div className="w-full max-w-[260px] space-y-2 mt-1">
+                <Input
+                  type="password"
+                  value={pwInput}
+                  onChange={e => { setPwInput(e.target.value); setPwError(''); }}
+                  placeholder="Password"
+                  className="text-sm text-center"
+                  autoFocus
+                />
+                {pwError && <p className="text-[11px] text-destructive">{pwError}</p>}
+                <Button type="submit" className="w-full gap-1.5" disabled={!pwInput.trim()}>
+                  <Lock className="h-3.5 w-3.5" /> Unlock
+                </Button>
+              </div>
+            </form>
+          )}
+
+          {unlocked && (
+          <>
           {/* Messages */}
           <ScrollArea className="flex-1 px-4 py-3">
             {messages.length === 0 && status !== 'thinking' && (
@@ -319,6 +369,8 @@ export function AIAssistant() {
               <Send className="h-4 w-4" />
             </Button>
           </div>
+          </>
+          )}
         </SheetContent>
       </Sheet>
     </>
