@@ -18,7 +18,7 @@ import { formatMoney } from '@/lib/utils';
 import { useActiveWeek } from '@/hooks/useActiveWeek';
 import { generatePreparerWeeklyReports } from '@/services/preparerReportGenerator';
 import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
-import { logAudit } from '@/services/auditLog';
+import { logAudit, diffSummary } from '@/services/auditLog';
 import { getActiveAccountId } from '@/contexts/AccountContext';
 
 interface Preparer {
@@ -47,6 +47,13 @@ const FIELD_LABELS: { key: keyof Preparer; label: string; type?: 'number' }[] = 
   { key: 'roles', label: 'Roles' },
   { key: 'preparer_client_percent', label: 'Preparer Client %', type: 'number' },
   { key: 'office_flat_rate', label: 'Office Flat Rate', type: 'number' },
+];
+
+// All fields editable via the Add/Edit dialog — used to build a field-level
+// change summary for the audit log (which field changed, old → new value).
+const PREPARER_AUDIT_FIELDS: { key: keyof Preparer; label: string }[] = [
+  ...FIELD_LABELS,
+  { key: 'notes', label: 'Notes' },
 ];
 
 const getColumns = (startIndex: number): Column<Preparer>[] => [
@@ -341,7 +348,14 @@ export default function Preparers() {
         const { error } = await supabase.from('preparers').update({ ...formData, updated_at: new Date().toISOString() }).eq('id', editItem.id);
         if (error) throw error;
         toast.success('Preparer updated');
-        await logAudit({ action: 'update', entityType: 'preparer', entityId: editItem.id, entityLabel: editItem.contractor, summary: `Updated preparer "${editItem.contractor}".` });
+        const changes = diffSummary<Preparer>(editItem, formData, PREPARER_AUDIT_FIELDS);
+        await logAudit({
+          action: 'update',
+          entityType: 'preparer',
+          entityId: editItem.id,
+          entityLabel: editItem.contractor,
+          summary: changes ? `Updated preparer "${editItem.contractor}" — ${changes}` : `Updated preparer "${editItem.contractor}" (no field changes).`,
+        });
       } else {
         const acct = getActiveAccountId();
         const { data: ins, error } = await supabase.from('preparers').insert({ ...formData, ...(acct ? { account_id: acct } : {}) } as any).select().single();

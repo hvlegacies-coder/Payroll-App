@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
-import { logAudit } from '@/services/auditLog';
+import { logAudit, diffSummary } from '@/services/auditLog';
 import { getActiveAccountId } from '@/contexts/AccountContext';
 import { Progress } from '@/components/ui/progress';
 import { parseFile } from '@/services/fileParser';
@@ -57,6 +57,15 @@ const FIELD_LABELS: { key: keyof Office; label: string; type?: 'number' | 'boole
   { key: 'process_preparers_share', label: 'Process Preparers Share', type: 'boolean' },
   { key: 'parent_office', label: 'Parent Office', type: 'select' },
   { key: 'clients_belongs_data', label: 'Clients Belongs Data', type: 'boolean' },
+];
+
+// All fields editable via the Add/Edit dialog — used to build a field-level
+// change summary for the audit log (which field changed, old → new value).
+const OFFICE_AUDIT_FIELDS: { key: keyof Office; label: string }[] = [
+  ...FIELD_LABELS,
+  { key: 'notes', label: 'Notes' },
+  { key: 'default_preparers_share', label: 'Default Preparers Share' },
+  { key: 'extra_efins', label: 'Extra EFINs' },
 ];
 
 const getColumns = (onDelete: (o: Office, e: React.MouseEvent) => void): Column<Office>[] => [
@@ -247,7 +256,14 @@ export default function Offices() {
         if (error) throw error;
         await saveFeeConfig(editItem.office_name);
         toast.success('Office updated');
-        await logAudit({ action: 'update', entityType: 'office', entityId: editItem.id, entityLabel: editItem.office_name, summary: `Updated office "${editItem.office_name}".` });
+        const changes = diffSummary<Office>(editItem, formData, OFFICE_AUDIT_FIELDS);
+        await logAudit({
+          action: 'update',
+          entityType: 'office',
+          entityId: editItem.id,
+          entityLabel: editItem.office_name,
+          summary: changes ? `Updated office "${editItem.office_name}" — ${changes}` : `Updated office "${editItem.office_name}" (no field changes).`,
+        });
       } else {
         const acct = getActiveAccountId();
         const { data: ins, error } = await supabase.from('offices').insert({ ...formData, ...(acct ? { account_id: acct } : {}) } as any).select().single();
