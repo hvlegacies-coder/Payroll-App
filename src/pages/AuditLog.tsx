@@ -4,6 +4,9 @@ import { FilterBar } from '@/components/payroll/FilterBar';
 import { DataTable, Column } from '@/components/payroll/DataTable';
 import { StatusBadge } from '@/components/payroll/StatusBadge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Eye } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 
 interface Row {
@@ -25,6 +28,7 @@ export default function AuditLog() {
   const [actor, setActor] = useState<string>('all');
   const [entityType, setEntityType] = useState<string>('all');
   const [loading, setLoading] = useState(true);
+  const [detailRow, setDetailRow] = useState<Row | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -59,6 +63,22 @@ export default function AuditLog() {
     { key: 'entity_type', header: 'Type' },
     { key: 'entity_label', header: 'Entity', render: (r) => r.entity_label || <span className="text-muted-foreground">—</span> },
     { key: 'summary', header: 'Summary', className: 'max-w-[420px] truncate' },
+    {
+      key: 'view',
+      header: '',
+      render: (r) => (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 w-7 p-0"
+          onClick={(e) => { e.stopPropagation(); setDetailRow(r); }}
+          aria-label="View full details"
+          title="View full details"
+        >
+          <Eye className="h-3.5 w-3.5" />
+        </Button>
+      ),
+    },
   ];
 
   return (
@@ -86,8 +106,51 @@ export default function AuditLog() {
       ) : filtered.length === 0 ? (
         <p className="text-sm text-muted-foreground p-6">No history yet.</p>
       ) : (
-        <DataTable columns={columns} data={filtered} />
+        <DataTable columns={columns} data={filtered} onRowClick={(row) => setDetailRow(row)} />
       )}
+
+      <Dialog open={!!detailRow} onOpenChange={(o) => !o && setDetailRow(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Change Details</DialogTitle>
+            <DialogDescription>Full record of this change — who, what, and when.</DialogDescription>
+          </DialogHeader>
+          {detailRow && (
+            <div className="space-y-3 text-sm">
+              <div className="flex justify-between gap-4">
+                <span className="text-muted-foreground shrink-0">When</span>
+                <span className="text-right">{new Date(detailRow.created_at).toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between gap-4">
+                <span className="text-muted-foreground shrink-0">Who</span>
+                <span className="font-medium text-right">{detailRow.actor}</span>
+              </div>
+              <div className="flex justify-between gap-4">
+                <span className="text-muted-foreground shrink-0">Action</span>
+                <StatusBadge status={actionStatus[detailRow.action] || detailRow.action} />
+              </div>
+              <div className="flex justify-between gap-4">
+                <span className="text-muted-foreground shrink-0">Type</span>
+                <span className="text-right">{detailRow.entity_type}</span>
+              </div>
+              <div className="flex justify-between gap-4">
+                <span className="text-muted-foreground shrink-0">Entity</span>
+                <span className="text-right">{detailRow.entity_label || '—'}</span>
+              </div>
+              {detailRow.entity_id && (
+                <div className="flex justify-between gap-4">
+                  <span className="text-muted-foreground shrink-0">Entity ID</span>
+                  <span className="font-mono text-xs text-right break-all">{detailRow.entity_id}</span>
+                </div>
+              )}
+              <div className="border-t border-border pt-3">
+                <p className="text-muted-foreground mb-1">Notes</p>
+                <p className="whitespace-pre-wrap leading-relaxed">{detailRow.summary || '—'}</p>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
