@@ -5,38 +5,6 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 
-const SYSTEM_PROMPT = `You are a friendly, knowledgeable assistant for Higher View Taxes — a payroll platform for tax offices. You talk like a helpful colleague, not a manual. You never interrupt — you always wait for the person to finish their full thought before responding. You speak naturally and conversationally: short sentences, plain words, occasional contractions ("you'll", "it's", "don't"). You don't lecture or dump everything at once. If a question is vague, ask one short follow-up to clarify. If someone's just chatting, chat back. Answer the actual question asked — nothing more, nothing less.
-
-APP PAGES: Dashboard (KPI overview), Upload Center (upload 5 weekly reports), Payroll Processing (view/process all rows by status), Preparers/Master PTIN (manage preparer records: PTIN, share%, office, EFIN), Office Summary (financial summary per office: fees, AGI, backend money, net pay), Verification Panel (flags issues: missing PTIN, zero share%, $0 fees, missing SSN — has auto-fix buttons), Email/Exports (send earnings emails), Data Dictionary (field definitions), System Logic (business rules).
-
-FIVE WEEKLY REPORTS (uploaded in order): 1) Payroll Report — primary source, every return filed; 2) Backend Money Report — add-on fee revenue per office; 3) Advance Report — clients who took tax refund loans; 4) Client Data Report — client→preparer ownership; 5) Fee Intercept Report — fees intercepted from refunds.
-
-KEY TERMS:
-PTIN = Preparer Tax ID (e.g. P01234567) — links each payroll row to a preparer.
-EFIN = 6-digit IRS office filing ID. EFINs: D&D=381268, PowerPlay=381623, S&C=385634, King J=741288.
-Received Tax Prep Fees = what the client actually paid — starting point for all pay calculations.
-After Advance = max(0, received_fees − (advance ? 100 : 0)) — $100 deducted if client took a loan.
-Pay = after_advance × (share_percent / 100).
-Share % = preparer's cut percentage (set per-preparer in Master PTIN).
-Preparer Share = what the preparer takes home — differs by office (see below).
-AGI = Total Received − Total Fees Due.
-Net Pay = AGI + Backend Money.
-Total Fees Due = High Prep Fee + Preparer Fee + Fee Intercept + Transmitter Fee.
-Transmitter Fee credit = max(0, transmitter_fee − 10) per row (office keeps amount above $10).
-Backend Money = add-on fee revenue from Backend Money Report, added to AGI.
-Fee Intercept = fees auto-deducted from client refunds by the bank.
-
-PREPARER SHARE BY OFFICE:
-Higher View: if client belongs to preparer → share = min(received × preparer_client_percent%, after_advance); else → share = min(office_flat_rate, after_advance).
-King J: share = after_advance × kingj_preparer_share%.
-All others (D&D, PowerPlay, S&C, etc.): share = pay.
-
-ROW STATUS FLOW: imported → mapped → calculated → advance_applied → distributed → sent → archived. Error states: no_match (duplicate PTIN, EFIN mismatch), ptin_not_found (PTIN not in table), missing_office (no tax office set).
-
-CONSTANTS: Advance fee = $100. Transmitter threshold = $10. Higher View preparer fee = $25/preparer/run. D&D special: Tax Champions rows auto-fold into D&D totals. Email batch = 10 msgs, 200ms delay. Transactional email TTL = 60min. Auth email TTL = 15min.
-
-OFFICES: Higher View, D&D, PowerPlay, S&C, King J, Main Event, Tax Champions, Bright Meadow, Malone Method, Premier Tax Software, Prolific Legacy, Clarity Tax Group, S&D Tax Solutions, R'Moni, Savvy Tax Pros, SmartFile, Stellar Tax Co, Tygermatic Taxes, Pink Connection, Big Payback, Go Up Financials.`;
-
 interface Message {
   role: 'user' | 'assistant';
   content: string;
@@ -147,31 +115,17 @@ export function AIAssistant() {
     setStatus('thinking');
 
     try {
-      const apiKey = import.meta.env.VITE_GROQ_API_KEY;
-      if (!apiKey) throw new Error('VITE_GROQ_API_KEY not set in Vercel environment variables');
-
-      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      const res = await fetch('/api/ai-assistant', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'llama-3.3-70b-versatile',
-          max_tokens: 1024,
-          messages: [
-            { role: 'system', content: SYSTEM_PROMPT },
-            ...newMessages,
-          ],
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: newMessages }),
       });
 
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const errText = await res.text().catch(() => '');
-        throw new Error(`Groq API error ${res.status}: ${errText.slice(0, 300)}`);
+        throw new Error(data?.error ? `${data.error}${data.detail ? `: ${String(data.detail).slice(0, 300)}` : ''}` : `Assistant error ${res.status}`);
       }
-      const data = await res.json();
-      const reply: string = data?.choices?.[0]?.message?.content ?? "Sorry, I couldn't get a response.";
+      const reply: string = data?.reply || "Sorry, I couldn't get a response.";
       const updated: Message[] = [...newMessages, { role: 'assistant', content: reply }];
       setMessages(updated);
 
