@@ -12,6 +12,7 @@ import Advances from "./pages/Advances";
 import LookupManagement from "./pages/LookupManagement";
 import Clients from "./pages/Clients";
 import Preparers from "./pages/Preparers";
+import PreparersSheetView from "./pages/PreparersSheetView";
 import Offices from "./pages/Offices";
 import FeeIntercept from "./pages/FeeIntercept";
 import OfficeReportPage from "./pages/OfficeReportPage";
@@ -76,6 +77,7 @@ const App = () => (
             <Route path="/clients" element={<ErrorBoundary><Clients /></ErrorBoundary>} />
             <Route path="/preparers" element={<ErrorBoundary><Preparers /></ErrorBoundary>} />
             <Route path="/offices" element={<ErrorBoundary><Offices /></ErrorBoundary>} />
+            <Route path="/preparers-sheet" element={<ErrorBoundary><PreparersSheetView /></ErrorBoundary>} />
             <Route path="/offices/:officeName" element={<ErrorBoundary><OfficeReportPage /></ErrorBoundary>} />
             <Route path="/office-hierarchy" element={<ErrorBoundary><OfficeHierarchy /></ErrorBoundary>} />
             <Route path="/fee-intercept" element={<ErrorBoundary><FeeIntercept /></ErrorBoundary>} />
