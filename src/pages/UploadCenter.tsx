@@ -35,8 +35,8 @@ const ALL_UPLOAD_TYPES = [
   { label: 'Payroll Report', displayLabel: 'Disbursement Listing', desc: 'Weekly disbursement listing from Drake — primary source of preparer pay, fees, and net checks issued for the week.', icon: FileText, accept: EXCEL_ACCEPTS, adminOnly: false },
   { label: 'Backend Money Report', desc: 'Backend office report capturing add-on fees, software fees, and net backend money owed back to each office.', icon: DollarSign, accept: EXCEL_ACCEPTS, adminOnly: false },
   { label: 'Advance Report', desc: 'Taxpayer advance / loan status report — tracks funded, pending, and denied taxpayer loans used to reconcile advances against disbursements.', icon: Shield, accept: EXCEL_ACCEPTS, adminOnly: true },
-  { label: 'Client Data Report', desc: 'Master client records and tax return data used to match taxpayers to preparers and validate fee, refund, and status fields.', icon: Users, accept: EXCEL_ACCEPTS, adminOnly: false },
-  { label: 'Client Email Report', desc: 'Client contact enrichment file — adds verified emails and phone numbers to client records for earnings reports and notifications.', icon: Mail, accept: EXCEL_ACCEPTS, adminOnly: false },
+  { label: 'Client Data Report', desc: 'Master client records and tax return data used to match taxpayers to preparers and validate fee, refund, and status fields (Report_1040returns-AcceptedSummary).', icon: Users, accept: EXCEL_ACCEPTS, adminOnly: false },
+  { label: 'Client Email Report', desc: 'Client contact enrichment file — adds verified emails and phone numbers to client records for earnings reports and notifications (Report_AddressandEmailSummary).', icon: Mail, accept: EXCEL_ACCEPTS, adminOnly: false },
   { label: 'Fee Intercept Report', desc: 'SubOffice fee intercept / daily deposit summary — reconciles intercepted fees per sub-office against expected backend totals.', icon: DollarSign, accept: EXCEL_ACCEPTS, adminOnly: true },
 ];
 
