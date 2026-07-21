@@ -108,8 +108,8 @@ export const EFIN_VIRTUAL_FIELDS: Record<string, EfinVirtualField[]> = {
     { id: '__efin_ero3__381623', label: 'ERO3-EFIN (381623)', efin: '381623', sourceKey: 'ERO3Fee' },
   ],
   'S & C': [
-    { id: '__efin_efile__385634', label: 'E-File-EFIN (385634)', efin: '385634', sourceKey: 'E-File Fee(s)' },
-    { id: '__efin_ero3__385634', label: 'ERO3-EFIN (385634)', efin: '385634', sourceKey: 'ERO3Fee' },
+    { id: '__efin_efile__381871', label: 'E-File-EFIN (381871)', efin: '381871', sourceKey: 'E-File Fee(s)' },
+    { id: '__efin_ero3__381871', label: 'ERO3-EFIN (381871)', efin: '381871', sourceKey: 'ERO3Fee' },
   ],
   'King J': [
     { id: '__efin_efile__741288', label: 'E-File-EFIN (741288)', efin: '741288', sourceKey: 'E-File Fee(s)' },

@@ -48,7 +48,7 @@ export const FEE_CONFIG_KEY: Record<
 export const EFIN_TILE_BY_OFFICE: Record<string, string> = {
   'D & D': '381268',
   'PowerPlay': '381623',
-  'S & C': '385634',
+  'S & C': '381871',
 };
 
 export const EFIN_TILE_FALLBACK_BY_OFFICE: Record<string, string> = {
