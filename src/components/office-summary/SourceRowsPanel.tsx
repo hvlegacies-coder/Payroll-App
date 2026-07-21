@@ -422,9 +422,15 @@ export function SourceRowsPanel({ officeScope, onExportData }: Props) {
             const officeMatch = !!rowTaxOffice && norm(rowTaxOffice) === norm(officeScope);
             if (!efinMatch && !officeMatch) continue;
           } else {
-            // Strict PTIN-only match: row belongs to this office iff its PTIN
-            // resolves to a preparer currently assigned within the scope.
-            if (!ptinMatch) continue;
+            // PTIN match (preparer currently assigned within the scope), OR
+            // EFIN match against this office's own/extra EFINs (scopeEfins —
+            // includes the "Extra EFINs" admin field). This lets a downline
+            // that shares an office-managed EFIN roll up into the head
+            // office's Front End Source Rows even when its PTIN doesn't
+            // resolve to a preparer assigned within the scope.
+            const rowEfin = String(getVal(r, 'EFIN') || '').trim();
+            const efinMatch = !!rowEfin && scopeEfins.has(rowEfin);
+            if (!ptinMatch && !efinMatch) continue;
           }
         }
         out.push({

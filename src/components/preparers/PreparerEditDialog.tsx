@@ -3,11 +3,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { Loader2, Save } from 'lucide-react';
+import { Loader2, Save, Trash2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { logAudit, diffSummary } from '@/services/auditLog';
 import { getActiveAccountId } from '@/contexts/AccountContext';
+import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
 
 export interface Preparer {
   id: string;
@@ -83,10 +84,31 @@ interface Props {
 export function PreparerEditDialog({ open, editItem, onOpenChange, onSaved, fields = FIELD_LABELS }: Props) {
   const [formData, setFormData] = useState<Omit<Preparer, 'id'>>(emptyPreparer);
   const [saving, setSaving] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   useEffect(() => {
     if (open) setFormData(editItem ? { ...editItem } : emptyPreparer);
   }, [open, editItem]);
+
+  const handleDelete = async () => {
+    if (!editItem) return;
+    try {
+      const { error } = await supabase.from('preparers').delete().eq('id', editItem.id);
+      if (error) throw error;
+      toast.success(`"${editItem.contractor}" deleted`);
+      await logAudit({
+        action: 'delete',
+        entityType: 'preparer',
+        entityId: editItem.id,
+        entityLabel: editItem.contractor,
+        summary: `Deleted preparer "${editItem.contractor}" (PTIN ${editItem.ptin}).`,
+      });
+      onOpenChange(false);
+      await onSaved();
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+  };
 
   const handleSave = async () => {
     if (!formData.ptin || !formData.contractor) { toast.error('PTIN and Contractor are required'); return; }
@@ -121,6 +143,7 @@ export function PreparerEditDialog({ open, editItem, onOpenChange, onSaved, fiel
   };
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-xl">
         <DialogHeader>
@@ -153,14 +176,30 @@ export function PreparerEditDialog({ open, editItem, onOpenChange, onSaved, fiel
             <Input value={formData.notes} onChange={e => setFormData(prev => ({ ...prev, notes: e.target.value }))} className="mt-1" />
           </div>
         </div>
-        <div className="flex gap-2 pt-2 justify-end">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button className="gap-2" onClick={handleSave} disabled={saving}>
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            {editItem ? 'Save Changes' : 'Add Preparer'}
-          </Button>
+        <div className="flex gap-2 pt-2 justify-between">
+          {editItem ? (
+            <Button variant="destructive" className="gap-2" onClick={() => setDeleteConfirmOpen(true)}>
+              <Trash2 className="h-4 w-4" /> Delete
+            </Button>
+          ) : <div />}
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+            <Button className="gap-2" onClick={handleSave} disabled={saving}>
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              {editItem ? 'Save Changes' : 'Add Preparer'}
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
+
+    <ConfirmDeleteDialog
+      open={deleteConfirmOpen}
+      onOpenChange={setDeleteConfirmOpen}
+      title="Delete preparer?"
+      entityName={editItem ? `${editItem.contractor} (${editItem.ptin})` : undefined}
+      onConfirm={handleDelete}
+    />
+    </>
   );
 }

@@ -20,7 +20,7 @@ import { logAudit } from '@/services/auditLog';
 import { getActiveAccountId } from '@/contexts/AccountContext';
 import { PreparerEditDialog, type Preparer } from '@/components/preparers/PreparerEditDialog';
 
-const getColumns = (startIndex: number): Column<Preparer>[] => [
+const getColumns = (startIndex: number, onDelete: (p: Preparer, e: React.MouseEvent) => void): Column<Preparer>[] => [
   { key: 'id', header: '#', render: (_r, index) => `${startIndex + (index ?? 0) + 1}` },
   { key: 'ptin', header: 'PTIN', mono: true },
   { key: 'contractor', header: 'Contractor' },
@@ -29,6 +29,11 @@ const getColumns = (startIndex: number): Column<Preparer>[] => [
   { key: 'office_flat_rate', header: 'Office Flat Rate', mono: true, render: (r) => formatMoney(r.office_flat_rate, { minimumFractionDigits: 0, maximumFractionDigits: 0 }) },
   { key: 'roles', header: 'Roles' },
   { key: 'active', header: 'Status', render: (r) => <StatusBadge status={r.active ? 'Active' : 'Inactive'} /> },
+  { key: 'id_delete' as keyof Preparer, header: '', render: (r) => (
+    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={(e) => onDelete(r, e)}>
+      <Trash2 className="h-4 w-4" />
+    </Button>
+  )},
 ];
 
 export default function Preparers() {
@@ -46,6 +51,7 @@ export default function Preparers() {
   const [addOpen, setAddOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [deleteRowTarget, setDeleteRowTarget] = useState<Preparer | null>(null);
   const [page, setPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(50);
 
@@ -144,6 +150,26 @@ export default function Preparers() {
       toast.error(err.message);
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const handleDeleteRow = async () => {
+    if (!deleteRowTarget) return;
+    try {
+      const { error } = await supabase.from('preparers').delete().eq('id', deleteRowTarget.id);
+      if (error) throw error;
+      toast.success(`"${deleteRowTarget.contractor}" deleted`);
+      await logAudit({
+        action: 'delete',
+        entityType: 'preparer',
+        entityId: deleteRowTarget.id,
+        entityLabel: deleteRowTarget.contractor,
+        summary: `Deleted preparer "${deleteRowTarget.contractor}" (PTIN ${deleteRowTarget.ptin}).`,
+      });
+      setDeleteRowTarget(null);
+      await loadPreparers();
+    } catch (err: any) {
+      toast.error(err.message);
     }
   };
 
@@ -305,6 +331,8 @@ export default function Preparers() {
     setAddOpen(true);
   };
 
+  const onDeleteRowClick = (p: Preparer, e: React.MouseEvent) => { e.stopPropagation(); setDeleteRowTarget(p); };
+
   const isFormOpen = addOpen || !!editItem;
 
   return (
@@ -405,7 +433,7 @@ export default function Preparers() {
         </div>
       ) : (
         <>
-          <DataTable columns={getColumns(pageStartIndex)} data={paginatedData} onRowClick={openEdit} />
+          <DataTable columns={getColumns(pageStartIndex, onDeleteRowClick)} data={paginatedData} onRowClick={openEdit} />
           <div className="flex items-center justify-between mt-4 text-sm text-muted-foreground">
             <div className="flex items-center gap-2">
               <span>Rows per page:</span>
@@ -441,6 +469,14 @@ export default function Preparers() {
         entityName={`${preparers.length} preparers`}
         confirmLabel="Delete all"
         onConfirm={handleDeleteAll}
+      />
+
+      <ConfirmDeleteDialog
+        open={!!deleteRowTarget}
+        onOpenChange={(open) => { if (!open) setDeleteRowTarget(null); }}
+        title="Delete preparer?"
+        entityName={deleteRowTarget ? `${deleteRowTarget.contractor} (${deleteRowTarget.ptin})` : undefined}
+        onConfirm={handleDeleteRow}
       />
 
       <PreparerEditDialog
