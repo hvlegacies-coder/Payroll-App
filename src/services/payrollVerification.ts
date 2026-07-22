@@ -194,6 +194,8 @@ export async function runPayrollVerification(weekLabel: string): Promise<Verific
   // ── PREPARER MATCHING CHECKS ──────────────────────────────────────────────
 
   const ptinCounts: Record<string, number> = {};
+  const ptinEfins: Record<string, string> = {};
+  const unmatchedRowDetails: Record<string, string[]> = {};
   const missingPtinRows: number[] = [];
   const missingSSNList: string[] = [];
   const zeroFeeList: string[] = [];
@@ -201,6 +203,7 @@ export async function runPayrollVerification(weekLabel: string): Promise<Verific
   for (let i = 0; i < payrollRows.length; i++) {
     const row = payrollRows[i];
     const ptin = getField(row, 'PTIN').toLowerCase();
+    const efin = getField(row, 'EFIN');
     const ssn = getField(row, 'Taxpayer SSN') || getField(row, 'TAXPAYER_SSN');
     const fee = toNum(getField(row, 'Received Tax Prep Fee(s)') || getField(row, 'RECEIVED_TAX_PREP_FEE_S_'));
     const lastName = getField(row, 'Taxpayer Last Name') || getField(row, 'TAXPAYER_LAST_NAME');
@@ -208,11 +211,30 @@ export async function runPayrollVerification(weekLabel: string): Promise<Verific
     const clientName = [firstName, lastName].filter(Boolean).join(' ') || '';
     const rowLabel = ptin ? `PTIN ${ptin.toUpperCase()}` : `Row ${i + 1}`;
     const clientLabel = clientName ? ` — ${clientName}` : '';
+    const ssnDigits = ssn.replace(/\D/g, '');
+    const ssnLast4 = ssnDigits.length >= 4 ? ssnDigits.slice(-4) : ssnDigits;
+    const fundingDate = getField(row, 'Funding Date') || getField(row, 'FUNDING_DATE');
+    const applicationDate = getField(row, 'Application Date') || getField(row, 'APPLICATION_DATE');
+    const disbursementType = getField(row, 'Disbursement Type') || getField(row, 'DISBURSEMENT_TYPE');
+    const expectedRefund = toNum(getField(row, 'Expected Refund') || getField(row, 'EXPECTED_REFUND'));
+    const actualRefund = toNum(getField(row, 'Actual Refund') || getField(row, 'ACTUAL_REFUND'));
 
     if (!ptin) {
       missingPtinRows.push(i + 1);
     } else {
       ptinCounts[ptin] = (ptinCounts[ptin] ?? 0) + 1;
+      if (efin && !ptinEfins[ptin]) ptinEfins[ptin] = efin;
+
+      if (!lookups.ptinToPreparers[ptin]) {
+        const officeNames = lookups.efinToOffices[efin] || [];
+        const officeLabel = officeNames.length > 0 ? officeNames.join(', ') : 'Unknown office';
+        if (!unmatchedRowDetails[ptin]) unmatchedRowDetails[ptin] = [];
+        unmatchedRowDetails[ptin].push(
+          `  Row ${i + 1} — Office: ${officeLabel} — EFIN: ${efin || 'N/A'} — Client: ${clientName || 'Unknown'} — SSN: ***-**-${ssnLast4 || '----'} — `
+          + `Disbursement: ${disbursementType || 'N/A'} — Application Date: ${applicationDate || 'N/A'} — Funding Date: ${fundingDate || 'N/A'} — `
+          + `Expected Refund: $${expectedRefund.toFixed(2)} — Actual Refund: $${actualRefund.toFixed(2)} — Received Fee: $${fee.toFixed(2)}`
+        );
+      }
     }
     if (!ssn) missingSSNList.push(`${rowLabel}${clientLabel}`);
     if (fee === 0) zeroFeeList.push(`Row ${i + 1} — ${rowLabel}${clientLabel} — $0 fee`);
@@ -229,14 +251,18 @@ export async function runPayrollVerification(weekLabel: string): Promise<Verific
     const inLookup = !!lookups.ptinToPreparers[ptin];
     const detail = prepDetail[ptin];
     const displayPtin = ptin.toUpperCase();
+    const rowOfficeNames = lookups.efinToOffices[ptinEfins[ptin] || ''] || [];
+    const rowOfficeLabel = rowOfficeNames.length > 0 ? rowOfficeNames.join(', ') : 'Unknown office';
 
     if (!inLookup) {
-      unmatchedPtins.push(`${displayPtin} — ${count} row(s) will be excluded from payroll`);
+      unmatchedPtins.push(`PTIN: ${displayPtin} — Office: ${rowOfficeLabel} — Preparer: Not in system — ${count} row(s) will be excluded from payroll`);
+      unmatchedPtins.push(...(unmatchedRowDetails[ptin] ?? []));
       unmatchedPtinsRaw.push({ ptin: displayPtin, contractor: displayPtin });
     } else {
       if (detail?.share_percent === 0) {
         const name = detail.contractor || displayPtin;
-        zeroSharePtins.push(`${name} (${displayPtin}) — ${count} row(s), pay will be $0`);
+        const office = detail.tax_office || rowOfficeLabel;
+        zeroSharePtins.push(`Office: ${office} — PTIN: ${displayPtin} — Preparer: ${name} — ${count} row(s), pay will be $0`);
         zeroSharePtinsRaw.push({ ptin: displayPtin, contractor: name });
       }
       if (detail && !detail.tax_office) {
