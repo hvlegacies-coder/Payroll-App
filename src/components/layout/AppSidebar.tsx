@@ -1,6 +1,6 @@
 import { NavLink, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
-import { Upload, Calculator, Banknote, Users, UserCheck, Building2, Mail, ClipboardList, Settings, ChevronLeft, BookOpen, FileCode, Activity, Eye, DollarSign, GitBranch, Lock, LockOpen, Table2 } from 'lucide-react';
+import { Upload, Calculator, Banknote, Users, UserCheck, Building2, Mail, ClipboardList, Settings, ChevronLeft, BookOpen, FileCode, Activity, Eye, DollarSign, GitBranch, Lock, LockOpen, Table2, Gift } from 'lucide-react';
 import { useState } from 'react';
 import hvLogo from '@/assets/hv-logo.png';
 import kjLogo from '@/assets/kj-logo.png';
@@ -16,6 +16,7 @@ const navSections = [
     { path: '/advances', label: 'Advances', icon: Banknote },
     { path: '/clients', label: 'Clients', icon: Users },
     { path: '/fee-intercept', label: 'Fee Intercept', icon: DollarSign },
+    { path: '/referral-program', label: 'Referral Program', icon: Gift },
   ]},
   { label: 'Configurations', items: [
     { path: '/preparers', label: 'Master PTIN (Preparers)', icon: UserCheck },

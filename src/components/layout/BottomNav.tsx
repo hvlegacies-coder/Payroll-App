@@ -3,7 +3,7 @@ import { LayoutDashboard, Upload, Calculator, MoreHorizontal } from 'lucide-reac
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
-import { Banknote, Users, UserCheck, Building2, Mail, ClipboardList, Settings, DollarSign, Eye, GitBranch, Activity, FileCode, BookOpen, Lock } from 'lucide-react';
+import { Banknote, Users, UserCheck, Building2, Mail, ClipboardList, Settings, DollarSign, Eye, GitBranch, Activity, FileCode, BookOpen, Lock, Gift } from 'lucide-react';
 import { useAdminLock } from '@/hooks/useAdminLock';
 
 const primaryTabs = [
@@ -17,6 +17,7 @@ const moreItems = [
   { path: '/advances', label: 'Advances', icon: Banknote },
   { path: '/clients', label: 'Clients', icon: Users },
   { path: '/fee-intercept', label: 'Fee Intercept', icon: DollarSign },
+  { path: '/referral-program', label: 'Referral Program', icon: Gift },
   { path: '/preparers', label: 'Preparers', icon: UserCheck },
   { path: '/offices', label: 'Offices', icon: Building2 },
   { path: '/office-hierarchy', label: 'Office Hierarchy', icon: GitBranch },

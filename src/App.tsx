@@ -15,6 +15,7 @@ import Preparers from "./pages/Preparers";
 import PreparersSheetView from "./pages/PreparersSheetView";
 import Offices from "./pages/Offices";
 import FeeIntercept from "./pages/FeeIntercept";
+import ReferralProgram from "./pages/ReferralProgram";
 import OfficeReportPage from "./pages/OfficeReportPage";
 import OfficeHierarchy from "./pages/OfficeHierarchy";
 import HigherViewDetail from "./pages/HigherViewDetail";
@@ -81,6 +82,7 @@ const App = () => (
             <Route path="/offices/:officeName" element={<ErrorBoundary><OfficeReportPage /></ErrorBoundary>} />
             <Route path="/office-hierarchy" element={<ErrorBoundary><OfficeHierarchy /></ErrorBoundary>} />
             <Route path="/fee-intercept" element={<ErrorBoundary><FeeIntercept /></ErrorBoundary>} />
+            <Route path="/referral-program" element={<ErrorBoundary><ReferralProgram /></ErrorBoundary>} />
             <Route path="/higher-view" element={<ErrorBoundary><HigherViewDetail /></ErrorBoundary>} />
             <Route path="/reports" element={<ErrorBoundary><Reports /></ErrorBoundary>} />
             <Route path="/exports" element={<ErrorBoundary><ExportsEmails /></ErrorBoundary>} />
