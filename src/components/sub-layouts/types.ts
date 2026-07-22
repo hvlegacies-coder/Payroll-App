@@ -41,6 +41,7 @@ export interface SubLayoutProps {
 export const BUILTIN_KEYS = {
   preparersShare: "__preparers_share",
   sourceRows: "__source_rows",
+  referralPayouts: "__referral_payouts",
 } as const;
 
 // Per-fee keys live as `__bf:<Fee Type>`, e.g. `__bf:Service Bureau Fee`
@@ -52,6 +53,7 @@ export const bfFeeFromKey = (k: string) => k.slice(BF_PREFIX.length);
 export const BUILTIN_LABELS: Record<string, string> = {
   [BUILTIN_KEYS.preparersShare]: "Preparers Share",
   [BUILTIN_KEYS.sourceRows]: "Source Rows",
+  [BUILTIN_KEYS.referralPayouts]: "Referral Payouts",
 };
 
 export function labelForKey(

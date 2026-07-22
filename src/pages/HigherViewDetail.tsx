@@ -3,6 +3,7 @@ import { PageHeader } from '@/components/payroll/PageHeader';
 import { SummaryTable } from '@/components/office-summary/SummaryTable';
 import { BackendFeeTable } from '@/components/office-summary/BackendFeeTable';
 import { PreparersShareTable } from '@/components/office-summary/PreparersShareTable';
+import { ReferralPayoutsTable } from '@/components/office-summary/ReferralPayoutsTable';
 import { SourceRowsPanel } from '@/components/office-summary/SourceRowsPanel';
 import { AlignmentBanner } from '@/components/office-summary/AlignmentBanner';
 import type { SummaryTableConfig } from '@/components/office-summary/types';
@@ -31,6 +32,7 @@ export default function OfficeSummary() {
   const [officeOptions, setOfficeOptions] = useState<string[]>([]);
   const [tableTotals, setTableTotals] = useState<Record<string, number>>({});
   const [preparersShareTotal, setPreparersShareTotal] = useState<number>(0);
+  const [referralPayoutsTotal, setReferralPayoutsTotal] = useState<number>(0);
   const [feeTotals, setFeeTotals] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -104,6 +106,7 @@ export default function OfficeSummary() {
   // Export data collectors
   const summaryDataRef = useRef<Record<string, { title: string; rows: { label: string; operator?: string; value: number }[]; total: number }>>({});
   const preparersDataRef = useRef<{ name: string; fee: number; net: number }[]>([]);
+  const referralPayoutsDataRef = useRef<{ referrer: string; amount: number; status: string; date: string }[]>([]);
   const backendDataRef = useRef<{ feeType: string; rows: { office: string; amount: number }[]; total: number }[]>([]);
   const sourceDataRef = useRef<Record<string, { columns: { key: string; header: string; money?: boolean }[]; rows: Record<string, any>[] }>>({});
 
@@ -136,6 +139,21 @@ export default function OfficeSummary() {
         rows: [
           ...preparersDataRef.current.map(r => [r.name, fmtMoney(r.fee), fmtMoney(r.net)] as (string | number)[]),
           ['Total', fmtMoney(totalFee), fmtMoney(totalNet)],
+        ],
+      });
+    }
+
+    // Referral Payouts
+    if (referralPayoutsDataRef.current.length > 0) {
+      const totalPaid = referralPayoutsDataRef.current
+        .filter(r => r.status.toLowerCase() === 'paid')
+        .reduce((s, r) => s + r.amount, 0);
+      sections.push({
+        title: 'Referral Payouts',
+        columns: ['Referrer', 'Amount', 'Status', 'Date'],
+        rows: [
+          ...referralPayoutsDataRef.current.map(r => [r.referrer, fmtMoney(r.amount), r.status, r.date] as (string | number)[]),
+          ['Total Paid', fmtMoney(totalPaid), '', ''],
         ],
       });
     }
@@ -206,6 +224,7 @@ export default function OfficeSummary() {
   useEffect(() => {
     setTableTotals({});
     setPreparersShareTotal(0);
+    setReferralPayoutsTotal(0);
     setFeeTotals({});
     if (!officeScope) {
       setTables([]);
@@ -397,6 +416,7 @@ export default function OfficeSummary() {
               {tables.filter(t => !hiddenKeys.includes(t.id)).map(t => {
                 const autoSiblings = [
                   { id: '__pshare__', title: 'Preparers Share', total: preparersShareTotal },
+                  { id: '__referral_payouts__', title: 'Referral Payouts', total: referralPayoutsTotal },
                   { id: '__bf_efile', title: 'E-File Fee(s)', total: feeTotals['E-File Fee(s)'] ?? 0 },
                   { id: '__bf_sbf', title: 'Service Bureau Fee', total: feeTotals['Service Bureau Fee'] ?? 0 },
                   { id: '__bf_ero3', title: 'ERO3Fee', total: feeTotals['ERO3Fee'] ?? 0 },
@@ -465,6 +485,15 @@ export default function OfficeSummary() {
                 officeScope={officeScope}
                 onTotalChange={total => setPreparersShareTotal(prev => prev === total ? prev : total)}
                 onExportData={rows => { preparersDataRef.current = rows; }}
+              />
+            </HideableBlock>
+          )}
+          {!hiddenKeys.includes(BUILTIN_KEYS.referralPayouts) && (
+            <HideableBlock isAdmin={isAdmin} itemKey={BUILTIN_KEYS.referralPayouts} onHideScoped={onToggleHiddenScoped}>
+              <ReferralPayoutsTable
+                officeScope={officeScope}
+                onTotalChange={total => setReferralPayoutsTotal(prev => prev === total ? prev : total)}
+                onExportData={rows => { referralPayoutsDataRef.current = rows; }}
               />
             </HideableBlock>
           )}
