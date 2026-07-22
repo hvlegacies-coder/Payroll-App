@@ -5,7 +5,7 @@ type StatusType =
   | 'Missing PTIN' | 'No Match' | 'Ready' | 'Advance Applied'
   | 'Calculated' | 'Distributed' | 'Sent' | 'Failed' | 'Archived'
   | 'Active' | 'Inactive' | 'Matched' | 'Unmatched' | 'Deducted'
-  | 'Duplicate' | 'Pending' | 'Completed' | 'Paid' | 'Partial';
+  | 'Duplicate' | 'Pending' | 'Completed' | 'Paid' | 'Partial' | 'Processing';
 
 const statusStyles: Record<string, string> = {
   Ready: 'bg-status-positive-bg text-status-positive',
@@ -28,6 +28,7 @@ const statusStyles: Record<string, string> = {
   Partial: 'bg-status-warning-bg text-status-warning',
   Duplicate: 'bg-status-warning-bg text-status-warning',
   Imported: 'bg-status-info-bg text-status-info',
+  Processing: 'bg-status-info-bg text-status-info',
   Calculated: 'bg-status-info-bg text-status-info',
   Uploaded: 'bg-status-info-bg text-status-info',
   Archived: 'bg-muted text-muted-foreground',
