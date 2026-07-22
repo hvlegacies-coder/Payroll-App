@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import { DollarSign, Clock, Calendar, Download, Loader2 } from 'lucide-react';
+import { DollarSign, Clock, Calendar, Download, Loader2, ScanSearch } from 'lucide-react';
 import { KpiCard } from '@/components/payroll/KpiCard';
 import { StatusBadge } from '@/components/payroll/StatusBadge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { DataTable, Column } from '@/components/payroll/DataTable';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { formatMoney } from '@/lib/utils';
 import { exportSectionsCsv } from '@/lib/exportReports';
 import { fetchReferralPayouts, type ReferralPayout } from '@/services/referralPayouts';
@@ -28,6 +29,7 @@ export function ReferralPayoutsView() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState<Tab>('All');
+  const [detailPayout, setDetailPayout] = useState<ReferralPayout | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -70,6 +72,19 @@ export function ReferralPayoutsView() {
     { key: 'amount', header: 'Amount', mono: true, render: (r) => formatMoney(r.amount) },
     { key: 'method', header: 'Method' },
     { key: 'status', header: 'Status', render: (r) => <StatusBadge status={titleCase(r.status)} /> },
+    {
+      key: 'details', header: 'Details', className: 'text-right',
+      render: (r) => (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7"
+          onClick={(e) => { e.stopPropagation(); setDetailPayout(r); }}
+        >
+          <ScanSearch className="h-4 w-4" />
+        </Button>
+      ),
+    },
   ];
 
   const handleExport = () => {
@@ -143,6 +158,60 @@ export function ReferralPayoutsView() {
       ) : (
         <DataTable columns={columns} data={filtered} emptyMessage="No referral payouts found." />
       )}
+
+      <Dialog open={!!detailPayout} onOpenChange={(o) => !o && setDetailPayout(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Payout details</DialogTitle>
+            <DialogDescription>Referrals included in this payout.</DialogDescription>
+          </DialogHeader>
+          {detailPayout && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs text-muted-foreground">Referrer</p>
+                  <p className="text-sm font-semibold">{detailPayout.referrerName}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Amount</p>
+                  <p className="text-sm font-semibold">{formatMoney(detailPayout.amount)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Method</p>
+                  <p className="text-sm font-semibold">{detailPayout.method || '—'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Status</p>
+                  <StatusBadge status={titleCase(detailPayout.status)} />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground">
+                  Included referrals ({detailPayout.referrals.length})
+                </p>
+                {detailPayout.referrals.length === 0 ? (
+                  <p className="text-xs text-muted-foreground italic">No referral detail available.</p>
+                ) : (
+                  <div className="space-y-2 max-h-72 overflow-y-auto">
+                    {detailPayout.referrals.map((r, i) => (
+                      <div key={i} className="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium truncate">{r.name || '(Unknown)'}</p>
+                          {r.email && <p className="text-xs text-muted-foreground truncate">{r.email}</p>}
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="text-sm font-mono">{formatMoney(r.amount)}</span>
+                          <StatusBadge status={titleCase(r.status)} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

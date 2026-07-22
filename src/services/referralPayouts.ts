@@ -1,5 +1,12 @@
 import { supabase } from '@/integrations/supabase/client';
 
+export interface ReferralPayoutReferral {
+  name: string;
+  email: string;
+  amount: number;
+  status: string;
+}
+
 export interface ReferralPayout {
   id: string;
   referrerName: string;
@@ -8,6 +15,7 @@ export interface ReferralPayout {
   method: string;
   status: string;
   date: string | null;
+  referrals: ReferralPayoutReferral[];
 }
 
 export interface ReferralOfficeMapping {

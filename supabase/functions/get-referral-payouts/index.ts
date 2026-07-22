@@ -12,6 +12,8 @@ import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors'
 //   payout_reports: id, referrer_id, amount, referral_ids, status,
 //                   payment_method, notes, processed_at, created_at
 //   referrers:      id, name, email, ... (joined via referrer_id)
+//   referrals:      id, referrer_id, referred_name, referred_email, status,
+//                   commission_amount, ... (looked up via payout_reports.referral_ids)
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
@@ -30,7 +32,7 @@ Deno.serve(async (req) => {
 
     const { data, error } = await referralClient
       .from('payout_reports')
-      .select('id, amount, status, payment_method, processed_at, created_at, referrer:referrers(name, email)')
+      .select('id, amount, status, payment_method, processed_at, created_at, referral_ids, referrer:referrers(name, email)')
       .order('created_at', { ascending: false })
       .limit(1000)
 
@@ -41,7 +43,27 @@ Deno.serve(async (req) => {
       })
     }
 
-    const payouts = (data ?? []).map((row: Record<string, any>) => ({
+    const rows = data ?? []
+    const allReferralIds = Array.from(new Set(rows.flatMap((r: Record<string, any>) => r.referral_ids ?? [])))
+
+    let referralsById: Record<string, { name: string; email: string; amount: number; status: string }> = {}
+    if (allReferralIds.length > 0) {
+      const { data: referralRows } = await referralClient
+        .from('referrals')
+        .select('id, referred_name, referred_email, status, commission_amount')
+        .in('id', allReferralIds)
+      referralsById = Object.fromEntries((referralRows ?? []).map((r: Record<string, any>) => [
+        r.id,
+        {
+          name: r.referred_name ?? '',
+          email: r.referred_email ?? '',
+          amount: Number(r.commission_amount ?? 0),
+          status: r.status ?? '',
+        },
+      ]))
+    }
+
+    const payouts = rows.map((row: Record<string, any>) => ({
       id: row.id,
       referrerName: row.referrer?.name ?? '',
       referrerEmail: row.referrer?.email ?? '',
@@ -49,6 +71,9 @@ Deno.serve(async (req) => {
       method: row.payment_method ?? '',
       status: row.status ?? '',
       date: row.processed_at ?? row.created_at ?? null,
+      referrals: (row.referral_ids ?? [])
+        .map((rid: string) => referralsById[rid])
+        .filter(Boolean),
     }))
 
     return new Response(JSON.stringify({ payouts }), {
