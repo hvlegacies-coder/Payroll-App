@@ -15,7 +15,70 @@ import {
   type VerificationCheck,
   type PrepToAdd,
   type PrepToFix,
+  type UnmatchedPtinEntry,
 } from '@/services/payrollVerification';
+
+// ── Unmatched PTIN entry ────────────────────────────────────────────────────
+
+function UnmatchedPtinCard({ entry }: { entry: UnmatchedPtinEntry }) {
+  const [rowsOpen, setRowsOpen] = useState(false);
+  return (
+    <div className="rounded-md border border-border/70 bg-background/40 p-2.5 space-y-1.5">
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="font-mono text-xs font-semibold">PTIN {entry.ptin}</span>
+        <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+          {entry.rowCount} row{entry.rowCount > 1 ? 's' : ''} excluded
+        </Badge>
+      </div>
+      <div className="text-[11px] space-y-0.5">
+        <p className={entry.officeAmbiguous ? 'text-yellow-600 dark:text-yellow-400' : 'text-muted-foreground'}>
+          <span className="font-medium text-foreground/80">Office: </span>
+          {entry.office}
+        </p>
+        {entry.possibleMatch ? (
+          <p className="text-yellow-600 dark:text-yellow-400">
+            <span className="font-medium">Possible typo — </span>
+            did you mean <span className="font-mono">{entry.possibleMatch.ptin}</span>
+            {' '}({entry.possibleMatch.contractor}{entry.possibleMatch.taxOffice ? `, ${entry.possibleMatch.taxOffice}` : ''})?
+          </p>
+        ) : (
+          <p className="text-muted-foreground">
+            <span className="font-medium text-foreground/80">Preparer: </span>
+            Not in system — add via "Auto-Add" above
+          </p>
+        )}
+      </div>
+      {entry.rows.length > 0 && (
+        <div>
+          <button
+            type="button"
+            className="text-[10px] text-primary hover:underline"
+            onClick={() => setRowsOpen(o => !o)}
+          >
+            {rowsOpen ? 'Hide' : 'Show'} affected row{entry.rows.length > 1 ? 's' : ''} ({entry.rows.length})
+          </button>
+          {rowsOpen && (
+            <div className="mt-1.5 space-y-1.5">
+              {entry.rows.map((r) => (
+                <div key={r.row} className="rounded border border-border/50 bg-muted/20 p-2 grid grid-cols-2 gap-x-3 gap-y-0.5 text-[10px]">
+                  <div className="col-span-2 font-medium text-foreground/80">Row {r.row} — {r.client}</div>
+                  <div><span className="text-muted-foreground">EFIN:</span> {r.efin}</div>
+                  <div><span className="text-muted-foreground">SSN:</span> ***-**-{r.ssnLast4}</div>
+                  <div><span className="text-muted-foreground">Disbursement:</span> {r.disbursement}</div>
+                  <div><span className="text-muted-foreground">Applied:</span> {r.applicationDate}</div>
+                  <div><span className="text-muted-foreground">Funded:</span> {r.fundingDate}</div>
+                  <div><span className="text-muted-foreground">Received Fee:</span> ${r.receivedFee.toFixed(2)}</div>
+                  <div><span className="text-muted-foreground">Expected Refund:</span> ${r.expectedRefund.toFixed(2)}</div>
+                  <div><span className="text-muted-foreground">Actual Refund:</span> ${r.actualRefund.toFixed(2)}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ── Check Card ───────────────────────────────────────────────────────────────
 
@@ -91,7 +154,14 @@ function CheckCard({
         </div>
       </div>
 
-      {expanded && check.details.length > 0 && (
+      {expanded && check.unmatchedPtinEntries && check.unmatchedPtinEntries.length > 0 && (
+        <div className="ml-8 mt-1 space-y-2 border-l-2 border-border pl-3 max-h-96 overflow-y-auto">
+          {check.unmatchedPtinEntries.map((entry) => (
+            <UnmatchedPtinCard key={entry.ptin} entry={entry} />
+          ))}
+        </div>
+      )}
+      {expanded && !check.unmatchedPtinEntries && check.details.length > 0 && (
         <div className="ml-8 mt-1 space-y-0.5 border-l-2 border-border pl-3 max-h-48 overflow-y-auto">
           {check.details.map((d, i) => (
             <p key={i} className="text-[11px] font-mono text-muted-foreground leading-relaxed">{d}</p>

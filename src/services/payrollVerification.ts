@@ -17,6 +17,28 @@ export interface PrepToFix {
 
 export type ResolveType = 'add_preparers' | 'set_share' | 'set_office';
 
+export interface UnmatchedPtinRow {
+  row: number;
+  efin: string;
+  client: string;
+  ssnLast4: string;
+  disbursement: string;
+  applicationDate: string;
+  fundingDate: string;
+  expectedRefund: number;
+  actualRefund: number;
+  receivedFee: number;
+}
+
+export interface UnmatchedPtinEntry {
+  ptin: string;
+  office: string;
+  officeAmbiguous: boolean;
+  possibleMatch: { contractor: string; ptin: string; taxOffice: string } | null;
+  rowCount: number;
+  rows: UnmatchedPtinRow[];
+}
+
 export interface VerificationCheck {
   id: string;
   category: 'uploads' | 'preparer_matching' | 'data_quality';
@@ -30,6 +52,7 @@ export interface VerificationCheck {
   fixLabel?: string;
   resolveType?: ResolveType;
   resolveData?: PrepToAdd[] | PrepToFix[];
+  unmatchedPtinEntries?: UnmatchedPtinEntry[];
 }
 
 export interface VerificationReport {
@@ -207,7 +230,7 @@ export async function runPayrollVerification(weekLabel: string): Promise<Verific
 
   const ptinCounts: Record<string, number> = {};
   const ptinEfins: Record<string, string> = {};
-  const unmatchedRowDetails: Record<string, string[]> = {};
+  const unmatchedRowDetails: Record<string, UnmatchedPtinRow[]> = {};
   const missingPtinRows: number[] = [];
   const missingSSNList: string[] = [];
   const zeroFeeList: string[] = [];
@@ -239,11 +262,18 @@ export async function runPayrollVerification(weekLabel: string): Promise<Verific
 
       if (!lookups.ptinToPreparers[ptin]) {
         if (!unmatchedRowDetails[ptin]) unmatchedRowDetails[ptin] = [];
-        unmatchedRowDetails[ptin].push(
-          `  Row ${i + 1} — EFIN: ${efin || 'N/A'} — Client: ${clientName || 'Unknown'} — SSN: ***-**-${ssnLast4 || '----'} — `
-          + `Disbursement: ${disbursementType || 'N/A'} — Application Date: ${formatMaybeExcelDate(applicationDate)} — Funding Date: ${formatMaybeExcelDate(fundingDate)} — `
-          + `Expected Refund: $${expectedRefund.toFixed(2)} — Actual Refund: $${actualRefund.toFixed(2)} — Received Fee: $${fee.toFixed(2)}`
-        );
+        unmatchedRowDetails[ptin].push({
+          row: i + 1,
+          efin: efin || 'N/A',
+          client: clientName || 'Unknown',
+          ssnLast4: ssnLast4 || '----',
+          disbursement: disbursementType || 'N/A',
+          applicationDate: formatMaybeExcelDate(applicationDate),
+          fundingDate: formatMaybeExcelDate(fundingDate),
+          expectedRefund,
+          actualRefund,
+          receivedFee: fee,
+        });
       }
     }
     if (!ssn) missingSSNList.push(`${rowLabel}${clientLabel}`);
@@ -251,11 +281,13 @@ export async function runPayrollVerification(weekLabel: string): Promise<Verific
   }
 
   // Best-guess office for a PTIN, based solely on the EFIN its payroll rows used.
-  function officeLabelForEfin(efin: string): string {
+  function officeLabelForEfin(efin: string): { label: string; ambiguous: boolean } {
     const candidates = lookups.efinToOffices[efin] || [];
-    if (candidates.length === 0) return efin ? `Unknown (EFIN ${efin} not linked to any office)` : 'Unknown (no EFIN on row)';
-    if (candidates.length === 1) return candidates[0];
-    return `Ambiguous — EFIN ${efin} is shared by ${candidates.length} offices (${candidates.join(', ')})`;
+    if (candidates.length === 0) {
+      return { label: efin ? `Unknown (EFIN ${efin} not linked to any office)` : 'Unknown (no EFIN on row)', ambiguous: false };
+    }
+    if (candidates.length === 1) return { label: candidates[0], ambiguous: false };
+    return { label: `EFIN ${efin} is shared by ${candidates.length} offices: ${candidates.join(', ')}`, ambiguous: true };
   }
 
   // Catches likely PTIN typos: is there an active preparer whose PTIN is a near-miss?
@@ -273,6 +305,7 @@ export async function runPayrollVerification(weekLabel: string): Promise<Verific
   }
 
   const unmatchedPtins: string[] = [];
+  const unmatchedPtinEntries: UnmatchedPtinEntry[] = [];
   const unmatchedPtinsRaw: PrepToAdd[] = [];
   const zeroSharePtins: string[] = [];
   const zeroSharePtinsRaw: PrepToFix[] = [];
@@ -284,22 +317,26 @@ export async function runPayrollVerification(weekLabel: string): Promise<Verific
     const inLookup = !!lookups.ptinToPreparers[ptin];
     const detail = prepDetail[ptin];
     const displayPtin = ptin.toUpperCase();
-    const officeLabel = officeLabelForEfin(ptinEfins[ptin] || '');
+    const office = officeLabelForEfin(ptinEfins[ptin] || '');
 
     if (!inLookup) {
       unmatchedCount++;
       const fuzzyMatch = findFuzzyPreparerMatch(displayPtin);
-      const matchNote = fuzzyMatch
-        ? ` — Possible match: ${fuzzyMatch.contractor} (PTIN ${fuzzyMatch.ptin}, ${fuzzyMatch.tax_office || 'no office'}) — check for a PTIN typo`
-        : '';
-      unmatchedPtins.push(`PTIN: ${displayPtin} — Office (via EFIN): ${officeLabel} — Preparer: Not in system${matchNote} — ${count} row(s) will be excluded from payroll`);
-      unmatchedPtins.push(...(unmatchedRowDetails[ptin] ?? []));
+      unmatchedPtins.push(`PTIN ${displayPtin} — ${count} row(s) will be excluded from payroll`);
+      unmatchedPtinEntries.push({
+        ptin: displayPtin,
+        office: office.label,
+        officeAmbiguous: office.ambiguous,
+        possibleMatch: fuzzyMatch ? { contractor: fuzzyMatch.contractor, ptin: fuzzyMatch.ptin, taxOffice: fuzzyMatch.tax_office } : null,
+        rowCount: count,
+        rows: unmatchedRowDetails[ptin] ?? [],
+      });
       unmatchedPtinsRaw.push({ ptin: displayPtin, contractor: fuzzyMatch?.contractor || displayPtin });
     } else {
       if (detail?.share_percent === 0) {
         const name = detail.contractor || displayPtin;
-        const office = detail.tax_office || officeLabel;
-        zeroSharePtins.push(`Office: ${office} — PTIN: ${displayPtin} — Preparer: ${name} — ${count} row(s), pay will be $0`);
+        const officeName = detail.tax_office || office.label;
+        zeroSharePtins.push(`Office: ${officeName} — PTIN: ${displayPtin} — Preparer: ${name} — ${count} row(s), pay will be $0`);
         zeroSharePtinsRaw.push({ ptin: displayPtin, contractor: name });
       }
       if (detail && !detail.tax_office) {
@@ -322,7 +359,8 @@ export async function runPayrollVerification(weekLabel: string): Promise<Verific
           affectedCount: unmatchedCount, details: unmatchedPtins.slice(0, 50),
           fixPath: `/preparers-sheet?vfilter=ptin_not_found&ptins=${unmatchedPtinsRaw.map(p => encodeURIComponent(p.ptin)).join(',')}`,
           fixLabel: 'Go to Master PTIN List',
-          resolveType: 'add_preparers', resolveData: unmatchedPtinsRaw }
+          resolveType: 'add_preparers', resolveData: unmatchedPtinsRaw,
+          unmatchedPtinEntries }
   );
 
   checks.push(
