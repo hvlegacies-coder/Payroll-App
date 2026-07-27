@@ -14,6 +14,10 @@ type Status = 'idle' | 'listening' | 'thinking';
 
 const AI_ASSISTANT_PASSWORD = 'HV Legacies';
 const UNLOCK_SESSION_KEY = 'hv_ai_assistant_unlocked';
+// How long to wait after the user stops speaking before treating them as
+// "done" and submitting. Longer than the browser's own (opaque, ~1.5-2s)
+// endpointer so a mid-thought pause doesn't cut them off early.
+const SILENCE_TIMEOUT_MS = 2800;
 
 export function AIAssistant() {
   const [open, setOpen] = useState(false);
@@ -25,12 +29,28 @@ export function AIAssistant() {
   const [unlocked, setUnlocked] = useState(() => sessionStorage.getItem(UNLOCK_SESSION_KEY) === 'true');
   const [pwInput, setPwInput] = useState('');
   const [pwError, setPwError] = useState('');
+  const [liveTranscript, setLiveTranscript] = useState('');
   const recognitionRef = useRef<any>(null);
+  const transcriptRef = useRef('');
+  const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, status]);
+
+  useEffect(() => {
+    return () => {
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+    };
+  }, []);
+
+  function clearSilenceTimer() {
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
+    }
+  }
 
   useEffect(() => {
     const handler = () => setOpen(true);
@@ -39,6 +59,7 @@ export function AIAssistant() {
   }, []);
 
   function handleClose() {
+    clearSilenceTimer();
     stopListening();
     window.speechSynthesis?.cancel();
     setOpen(false);
@@ -59,10 +80,13 @@ export function AIAssistant() {
   }
 
   function stopListening() {
+    clearSilenceTimer();
     if (recognitionRef.current) {
       try { recognitionRef.current.stop(); } catch { /* ignore */ }
       recognitionRef.current = null;
     }
+    transcriptRef.current = '';
+    setLiveTranscript('');
     setStatus('idle');
   }
 
@@ -73,21 +97,54 @@ export function AIAssistant() {
       return;
     }
     setError(null);
+    transcriptRef.current = '';
+    setLiveTranscript('');
     const r = new SR();
-    r.continuous = false;
-    r.interimResults = false;
+    // Keep the mic open and stream interim results — the browser's own
+    // built-in silence detection (used when continuous=false) cuts users
+    // off too early. We drive end-of-speech ourselves via SILENCE_TIMEOUT_MS.
+    r.continuous = true;
+    r.interimResults = true;
     r.lang = 'en-US';
     r.onresult = (e: any) => {
-      const transcript: string = e.results[0][0].transcript;
-      sendMessage(transcript);
+      let finalText = '';
+      let interimText = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const res = e.results[i];
+        if (res.isFinal) finalText += res[0].transcript;
+        else interimText += res[0].transcript;
+      }
+      if (finalText) transcriptRef.current = `${transcriptRef.current} ${finalText}`.trim();
+      setLiveTranscript(`${transcriptRef.current} ${interimText}`.trim());
+
+      clearSilenceTimer();
+      silenceTimerRef.current = setTimeout(() => {
+        const text = transcriptRef.current.trim();
+        stopListening();
+        if (text) sendMessage(text);
+      }, SILENCE_TIMEOUT_MS);
     };
     r.onerror = () => {
-      setStatus('idle');
+      if (recognitionRef.current !== r) return;
+      clearSilenceTimer();
       recognitionRef.current = null;
+      transcriptRef.current = '';
+      setLiveTranscript('');
+      setStatus('idle');
     };
     r.onend = () => {
-      if (status === 'listening') setStatus('idle');
+      // Continuous sessions can end on their own (network hiccup, browser
+      // session cap). Only act if this instance is still the active one —
+      // if stopListening() already ran, it nulled recognitionRef and this
+      // is an expected, stale onend to ignore (avoids a double-submit).
+      if (recognitionRef.current !== r) return;
       recognitionRef.current = null;
+      clearSilenceTimer();
+      const text = transcriptRef.current.trim();
+      transcriptRef.current = '';
+      setLiveTranscript('');
+      if (text) sendMessage(text);
+      else setStatus('idle');
     };
     r.start();
     recognitionRef.current = r;
@@ -96,7 +153,11 @@ export function AIAssistant() {
 
   function toggleMic() {
     if (status === 'listening') {
+      // Explicit "I'm done talking" — submit whatever's been captured so
+      // far instead of making the user wait out the silence timer.
+      const text = transcriptRef.current.trim();
       stopListening();
+      if (text) sendMessage(text);
     } else if (status === 'idle') {
       startListening();
     }
@@ -286,9 +347,12 @@ export function AIAssistant() {
 
           {/* Status bar */}
           {status === 'listening' && (
-            <div className="mx-4 mb-1 flex items-center gap-2 text-[10px] text-primary bg-primary/10 px-3 py-2 rounded-lg">
-              <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-              Listening… speak your question
+            <div className="mx-4 mb-1 flex items-start gap-2 text-[10px] text-primary bg-primary/10 px-3 py-2 rounded-lg">
+              <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse mt-0.5 shrink-0" />
+              <span>
+                {liveTranscript || 'Listening… speak your question'}
+                <span className="block text-primary/60 mt-0.5">Pause when you're done, or tap the mic to send now.</span>
+              </span>
             </div>
           )}
 
