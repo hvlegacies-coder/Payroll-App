@@ -130,8 +130,8 @@ export default function Clients() {
         if (match) {
           matched++;
           upserts.push({
-            ssn_ein: match.ssnEin,
-            client_name: match.clientName,
+            ssn_ein: normalize(match.ssnEin),
+            client_name: normalize(match.clientName),
             client_belongs_to: answer,
             email: match.email || '',
           });
@@ -152,7 +152,7 @@ export default function Clients() {
         setClients(prev => {
           const updated = [...prev];
           for (const u of upserts) {
-            const idx = updated.findIndex(c => c.ssnEin === u.ssn_ein && c.clientName === u.client_name);
+            const idx = updated.findIndex(c => normalize(c.ssnEin) === u.ssn_ein && normalize(c.clientName) === u.client_name);
             if (idx >= 0) updated[idx] = { ...updated[idx], clientBelongsTo: u.client_belongs_to };
           }
           return updated;
@@ -485,8 +485,8 @@ export default function Clients() {
                   // Persist to client_overrides table
                   try {
                     const { error } = await supabase.from('client_overrides').upsert({
-                      ssn_ein: selected.ssnEin,
-                      client_name: selected.clientName,
+                      ssn_ein: normalize(selected.ssnEin),
+                      client_name: normalize(selected.clientName),
                       client_belongs_to: editForm.clientBelongsTo || '',
                       email: editForm.email || '',
                       location_name: editForm.locationName || '',
