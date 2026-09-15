@@ -1,10 +1,11 @@
 import { NavLink, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { Upload, Calculator, Banknote, Users, UserCheck, Building2, Mail, ClipboardList, Settings, ChevronLeft, BookOpen, FileCode, Activity, Eye, DollarSign, GitBranch, Lock, LockOpen, Table2, Gift } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import hvLogo from '@/assets/hv-logo.png';
 import kjLogo from '@/assets/kj-logo.png';
 import { useAdminLock } from '@/hooks/useAdminLock';
+import { useScrollGlow } from '@/hooks/useScrollGlow';
 
 const navSections = [
   { label: 'Operations', items: [
@@ -39,10 +40,12 @@ const navSections = [
 
 export function AppSidebar() {
   const [collapsed, setCollapsed] = useState(false);
+  const [navEl, setNavEl] = useState<HTMLElement | null>(null);
   const location = useLocation();
   const currentUser = localStorage.getItem('hvt_user');
   const isKingJ = currentUser === 'King J';
   const { isUnlocked, isLocked, requestUnlock } = useAdminLock();
+  useScrollGlow(navEl);
 
   const logo = isKingJ ? kjLogo : hvLogo;
   const brandName = isKingJ ? 'King J Income Tax' : 'Higher View Taxes';
@@ -73,7 +76,7 @@ export function AppSidebar() {
           <img src={logo} alt={brandName} className="h-8 w-8 rounded-lg object-contain" />
         )}
       </div>
-      <nav className="flex-1 py-2 px-2 overflow-y-auto">
+      <nav ref={setNavEl} className="flex-1 py-2 px-2 overflow-y-auto sidebar-scroll">
         {navSections.map((section) => (
           <div key={section.label} className="mb-1">
             {!collapsed && (

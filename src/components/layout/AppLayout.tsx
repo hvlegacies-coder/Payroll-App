@@ -2,12 +2,15 @@ import { Outlet, Navigate, useLocation } from 'react-router-dom';
 import { AppSidebar } from './AppSidebar';
 import { AppHeader } from './AppHeader';
 import { BottomNav } from './BottomNav';
+import { ScrollIndicator } from './ScrollIndicator';
 import { AIAssistant } from '@/components/AIAssistant';
 import { cn } from '@/lib/utils';
+import { useScrollGlow } from '@/hooks/useScrollGlow';
 
 export function AppLayout() {
   const location = useLocation();
   const user = typeof window !== 'undefined' ? localStorage.getItem('hvt_user') : null;
+  useScrollGlow(typeof window !== 'undefined' ? window : null);
   if (!user) {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   }
@@ -21,6 +24,7 @@ export function AppLayout() {
         </main>
       </div>
       <BottomNav />
+      <ScrollIndicator />
       <AIAssistant />
     </div>
   );
