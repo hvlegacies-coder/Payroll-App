@@ -1,3 +1,5 @@
+import Anthropic from '@anthropic-ai/sdk';
+
 export const config = { runtime: 'edge' };
 
 declare const process: { env: Record<string, string | undefined> };
@@ -166,78 +168,65 @@ RESPONSE STYLE
 - If you don't know something specific to this app, say so honestly
 `;
 
-interface Message {
-  role: 'user' | 'assistant';
-  content: string;
-}
-
 export default async function handler(req: Request): Promise<Response> {
   const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
   };
+  const json = (body: unknown, status: number) =>
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
 
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   if (req.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
-      status: 405,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return json({ error: 'Method not allowed' }, 405);
   }
 
-  const apiKey = process.env.GROQ_API_KEY;
+  const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
-    return new Response(JSON.stringify({ error: 'GROQ_API_KEY not configured' }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return json({ error: 'ANTHROPIC_API_KEY not configured' }, 500);
   }
 
-  let messages: Message[];
+  let messages: Anthropic.MessageParam[];
   try {
     const body = await req.json();
     messages = body.messages;
     if (!Array.isArray(messages) || messages.length === 0) throw new Error('invalid');
   } catch {
-    return new Response(JSON.stringify({ error: 'Invalid request body' }), {
-      status: 400,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return json({ error: 'Invalid request body' }, 400);
   }
 
-  const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'llama-3.3-70b-versatile',
-      max_tokens: 1024,
-      messages: [
-        { role: 'system', content: KNOWLEDGE_BASE },
-        ...messages,
-      ],
-    }),
-  });
-
-  if (!groqRes.ok) {
-    const err = await groqRes.text();
-    return new Response(JSON.stringify({ error: 'AI service error', detail: err }), {
-      status: 502,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  const client = new Anthropic({ apiKey });
+  try {
+    const response = await client.beta.messages.create({
+      model: 'claude-opus-5-5',
+      max_tokens: 16000,
+      output_config: { effort: 'low' },
+      betas: ['server-side-fallback-2026-07-01'],
+      fallbacks: 'default',
+      system: KNOWLEDGE_BASE,
+      messages,
     });
+
+    if (response.stop_reason === 'refusal') {
+      return json({ reply: "Sorry, I can't help with that one." }, 200);
+    }
+
+    const reply = response.content
+      .filter((b): b is Anthropic.Beta.BetaTextBlock => b.type === 'text')
+      .map((b) => b.text)
+      .join('');
+    return json({ reply }, 200);
+  } catch (err) {
+    if (err instanceof Anthropic.APIError) {
+      return json({ error: 'AI service error', detail: err.message }, 502);
+    }
+    throw err;
   }
-
-  const data = await groqRes.json();
-  const reply = data?.choices?.[0]?.message?.content ?? '';
-
-  return new Response(JSON.stringify({ reply }), {
-    status: 200,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-  });
 }
