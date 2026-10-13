@@ -1,6 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { toNum } from "@/lib/num";
 import { runPayrollVerification } from "@/services/payrollVerification";
+import { getSubAccountOffices, rowMatchesSubAccount } from "@/config/subAccountOffices";
 
 export type AuditStatus = "pass" | "fail" | "warn";
 
@@ -276,6 +277,92 @@ export async function countRecentCrashes(): Promise<AuditResult[]> {
   }
 }
 
+// ── Sub-accounts vs Office Summary ───────────────────────────────────────────
+
+export interface SubAccountAuditInput {
+  account: { name: string; slug: string };
+  offices: { office_name: string; parent_office: string | null }[];
+  preparers: { contractor: string; ptin: string; tax_office: string | null; main_office: string | null }[];
+}
+
+const normOffice = (s: string | null | undefined) => (s || "").replace(/\s+/g, "").toLowerCase();
+
+/**
+ * Pure check that a sub-account dashboard shows the same office as the
+ * master Office Summary. The summary tables are shared components scoped by
+ * the canonical office, but the sub-account preparer list matches names via
+ * SUB_ACCOUNT_OFFICES only, while Office Summary also rolls in downline
+ * offices (offices.parent_office). Returns one problem string per mismatch.
+ */
+export function evaluateSubAccount({ account, offices, preparers }: SubAccountAuditInput): string[] {
+  const mapped = getSubAccountOffices(account.slug);
+  if (mapped.length === 0)
+    return [`No office mapping for slug "${account.slug}" in config/subAccountOffices.ts — dashboard shows nothing`];
+
+  const canonical = mapped[0];
+  const byNorm = new Map(offices.map((o) => [normOffice(o.office_name), o.office_name]));
+  const officeName = byNorm.get(normOffice(canonical));
+  if (!officeName)
+    return [`Mapped office "${canonical}" is not an active office — sub-account summary will be empty`];
+
+  const problems: string[] = [];
+  if (officeName !== canonical)
+    problems.push(`Mapped office "${canonical}" differs from office name "${officeName}" — spacing/case mismatch can drop saved table configs`);
+
+  // Downline of the canonical office, same rule Office Summary uses.
+  const parentOf = new Map<string, string>();
+  for (const o of offices) {
+    const parent = byNorm.get(normOffice(o.parent_office));
+    if (parent && parent !== o.office_name) parentOf.set(o.office_name, parent);
+  }
+  const downline = new Set([officeName]);
+  for (const o of offices) {
+    let cur: string | undefined = o.office_name;
+    for (let hops = 0; cur && hops < 20; hops++) {
+      if (cur === officeName) { downline.add(o.office_name); break; }
+      cur = parentOf.get(cur);
+    }
+  }
+  const downlineNorm = new Set([...downline].map(normOffice));
+
+  for (const p of preparers) {
+    const inSummary = downlineNorm.has(normOffice(p.tax_office));
+    const inSub = rowMatchesSubAccount(p.tax_office, account.slug) || rowMatchesSubAccount(p.main_office, account.slug);
+    if (inSummary && !inSub)
+      problems.push(`${p.contractor || p.ptin} (${p.ptin}) — office "${p.tax_office}" is in ${officeName}'s Office Summary but missing from the sub-account preparer list`);
+  }
+  return problems;
+}
+
+export async function runSubAccountChecks(): Promise<AuditResult[]> {
+  try {
+    const [accRes, offRes, prepRes] = await Promise.all([
+      supabase.from("accounts").select("name, slug").not("parent_account_id", "is", null).eq("active", true),
+      supabase.from("offices").select("office_name, parent_office").eq("active", true),
+      supabase.from("preparers").select("contractor, ptin, tax_office, main_office").eq("active", true),
+    ]);
+    if (accRes.error) throw accRes.error;
+    if (offRes.error) throw offRes.error;
+    if (prepRes.error) throw prepRes.error;
+    return (accRes.data || []).map((account: any) => {
+      const problems = evaluateSubAccount({
+        account,
+        offices: (offRes.data || []) as any,
+        preparers: (prepRes.data || []) as any,
+      });
+      return {
+        name: `Sub-account "${account.name}" matches Office Summary`,
+        status: problems.length === 0 ? "pass" : "fail",
+        expected: "same office, same preparers",
+        actual: problems.length === 0 ? "matches" : `${problems.length} mismatch(es)`,
+        detail: problems.slice(0, 20).join("\n") || undefined,
+      } as AuditResult;
+    });
+  } catch (e) {
+    return [failed("Sub-accounts match Office Summary", e)];
+  }
+}
+
 // ── Full audit ───────────────────────────────────────────────────────────────
 
 async function runVerificationAsAudit(weekLabel: string): Promise<AuditResult[]> {
@@ -300,6 +387,7 @@ export async function runAppAudit(weekLabel: string | null | undefined): Promise
     weekLabel ? runVerificationAsAudit(weekLabel) : Promise.resolve([]),
     weekLabel ? runPayrollMathChecks(weekLabel) : Promise.resolve([]),
     runIntegrityChecks(),
+    runSubAccountChecks(),
     countRecentCrashes(),
   ]);
   return parts.flat();
