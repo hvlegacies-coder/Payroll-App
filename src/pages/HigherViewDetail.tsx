@@ -20,7 +20,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import { HideableBlock, HiddenTablesBar } from '@/components/sub-layouts/visibility';
 import { BUILTIN_KEYS, bfKey, isBfKey, bfFeeFromKey } from '@/components/sub-layouts/types';
 import { formatMoney } from '@/lib/utils';
-import { ensureTotalsTemplateFields } from '@/config/subSummaryTables';
 
 const AGENCY_ADMIN_SLUG = '__agency__';        // legacy slug — admin-view hides
 const AGENCY_OFFICES_SLUG = '__agency_offices__'; // hides propagated to offices

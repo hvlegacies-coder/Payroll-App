@@ -5,7 +5,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { useAccount } from "@/contexts/AccountContext";
 import { getSubAccountOffices, rowMatchesSubAccount } from "@/config/subAccountOffices";
-import { ensureTotalsTemplateFields } from "@/config/subSummaryTables";
 import { SubLayoutRouter } from "@/components/sub-layouts";
 import type { SubPreparer } from "@/components/sub-layouts/types";
 import type { SummaryTableConfig } from "@/components/office-summary/types";
@@ -44,7 +43,8 @@ export default function SubAccountDashboard() {
         .maybeSingle();
       if (!cancelled) {
         const loaded = ((data?.tables as unknown) as SummaryTableConfig[]) || [];
-        setSummaryTables(ensureTotalsTemplateFields(loaded));
+        // Use the saved config as-is so totals match the master Office Summary.
+        setSummaryTables(loaded);
       }
     })();
     return () => { cancelled = true; };
