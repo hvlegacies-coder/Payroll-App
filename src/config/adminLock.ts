@@ -5,6 +5,7 @@ export const LOCKED_ROUTES = [
   "/data-dictionary",
   "/settings",
   "/accounts",
+  "/debug/integrity",
 ] as const;
 
 export function isLockedPath(path: string): boolean {

@@ -2,6 +2,7 @@ import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import { ThemeProvider } from "./components/ThemeProvider.tsx";
 import "./index.css";
+import { logAppError } from "./services/appAudit";
 
 // Force-unregister any previously installed service worker on ALL hosts and
 // purge its caches. A stale PWA build was serving cached app shells to new
@@ -14,6 +15,9 @@ if ("serviceWorker" in navigator) {
     caches.keys().then((keys) => keys.forEach((k) => caches.delete(k)));
   }
 }
+
+window.addEventListener("error", (e) => logAppError(e.error ?? e.message));
+window.addEventListener("unhandledrejection", (e) => logAppError(e.reason));
 
 createRoot(document.getElementById("root")!).render(
   <ThemeProvider>

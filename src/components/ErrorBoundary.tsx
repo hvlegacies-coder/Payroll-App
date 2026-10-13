@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { AlertTriangle } from "lucide-react";
+import { logAppError } from "@/services/appAudit";
 
 interface Props {
   children: ReactNode;
@@ -28,6 +29,7 @@ export class ErrorBoundary extends Component<Props, State> {
     // Surface to console for debugging without crashing the tree.
     // eslint-disable-next-line no-console
     console.error("[ErrorBoundary]", this.props.label || "", error, info);
+    logAppError(error);
   }
 
   render() {

@@ -16,6 +16,7 @@ import { useActiveWeek } from '@/hooks/useActiveWeek';
 import { generatePreparerWeeklyReports } from '@/services/preparerReportGenerator';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { VerificationPanel } from '@/components/payroll/VerificationPanel';
+import { runAppAuditAndNotify } from '@/services/appAudit';
 
 /**
  * SHA-256 hash of file bytes, hex-encoded. Used to detect when the exact
@@ -315,6 +316,9 @@ export default function UploadCenter() {
           toast.warning(`Payroll imported, but preparer earnings update failed: ${err.message || err}`);
         }
       }
+
+      // Background self-audit: any problems land in the header notification bell.
+      runAppAuditAndNotify(activeWeek);
     } catch (err: any) {
       setState(s => ({ ...s, step: 'error', progress: 100 }));
       toast.error(`Import failed: ${err.message}`);
