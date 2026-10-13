@@ -1,4 +1,4 @@
-import { Search, ChevronDown, Sun, Moon, Plus, Trash2, Headset } from 'lucide-react';
+import { Search, ChevronDown, Sun, Moon, Plus, Trash2, Headset, HeartPulse } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -141,6 +141,9 @@ export function AppHeader() {
           onClick={() => window.dispatchEvent(new CustomEvent('open-ai-assistant'))}
         >
           <Headset className="h-4 w-4" />
+        </Button>
+        <Button variant="ghost" size="icon" className="h-9 w-9" title="App Health" onClick={() => navigate('/debug/integrity')}>
+          <HeartPulse className="h-4 w-4" />
         </Button>
         <Button variant="ghost" size="icon" className="h-9 w-9 text-destructive hover:text-destructive" title="Delete selected payroll week" onClick={() => setDeleteOpen(true)} disabled={!selectedWeek}>
           <Trash2 className="h-4 w-4" />

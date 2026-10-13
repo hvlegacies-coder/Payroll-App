@@ -1,6 +1,6 @@
 import { NavLink, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
-import { Upload, Calculator, Banknote, Users, UserCheck, Building2, Mail, ClipboardList, Settings, ChevronLeft, BookOpen, FileCode, Activity, Eye, DollarSign, GitBranch, Lock, LockOpen, Table2, Gift, HeartPulse } from 'lucide-react';
+import { Upload, Calculator, Banknote, Users, UserCheck, Building2, Mail, ClipboardList, Settings, ChevronLeft, BookOpen, FileCode, Activity, Eye, DollarSign, GitBranch, Lock, LockOpen, Table2, Gift } from 'lucide-react';
 import { useRef, useState } from 'react';
 import hvLogo from '@/assets/hv-logo.png';
 import kjLogo from '@/assets/kj-logo.png';
@@ -31,7 +31,6 @@ const navSections = [
   ]},
   { label: 'System', items: [
     { path: '/audit', label: 'Audit Log', icon: ClipboardList },
-    { path: '/debug/integrity', label: 'App Health', icon: HeartPulse },
     { path: '/processing-logs', label: 'Processing Logs', icon: Activity },
     { path: '/system-logic', label: 'System Logic', icon: FileCode },
     { path: '/data-dictionary', label: 'Data Dictionary', icon: BookOpen },
