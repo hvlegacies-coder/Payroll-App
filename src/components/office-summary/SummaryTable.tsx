@@ -97,7 +97,7 @@ export function SummaryTable({ config, onChange, onDelete, officeScope, siblingT
   const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
   // Shared cached data across all SummaryTable instances on the page.
   const officesQuery = useOfficesAndPayrollLookups(selectedWeek, refreshTick);
-  const backendQuery = useBackendCtxData();
+  const backendQuery = useBackendCtxData(refreshTick);
   const uploadRowsQuery = useUploadRows(selectedWeek, refreshTick, UPLOAD_TYPE_MAP as Record<string, string>, selectedWeekRange);
   const officeList = officesQuery.data?.offices.officeList ?? [];
   const parentMap = officesQuery.data?.offices.parentMap ?? {};

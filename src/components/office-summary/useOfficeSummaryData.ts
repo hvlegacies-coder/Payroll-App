@@ -28,7 +28,9 @@ export function useOfficesAndPayrollLookups(selectedWeek: string | null | undefi
   return useQuery<OfficesPreparersLookups>({
     queryKey: ['os-offices-payroll', selectedWeek, refreshTick],
     enabled: !!selectedWeek,
-    staleTime: 60_000,
+    // Small query: always revalidate on mount so edits made on other pages
+    // (preparers, offices) show up without a browser reload.
+    staleTime: 0,
     queryFn: async () => {
       const [officesRes, preparersRes, payLookups] = await Promise.all([
         supabase.from('offices').select('office_name, parent_office, primary_efin, secondary_efin').eq('active', true).order('office_name'),
@@ -66,10 +68,10 @@ export function useOfficesAndPayrollLookups(selectedWeek: string | null | undefi
   });
 }
 
-export function useBackendCtxData() {
+export function useBackendCtxData(refreshTick: number) {
   return useQuery<BackendCtxData>({
-    queryKey: ['os-backend-ctx'],
-    staleTime: 60_000,
+    queryKey: ['os-backend-ctx', refreshTick],
+    staleTime: 0,
     queryFn: async () => {
       const [officesRes, preparersRes, configsRes] = await Promise.all([
         supabase.from('offices').select('office_name, parent_office, primary_efin, secondary_efin').eq('active', true),

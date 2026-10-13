@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, XCircle, RefreshCw, AlertTriangle, Sparkles } from "lucide-react";
+import { CheckCircle2, XCircle, RefreshCw, AlertTriangle, Sparkles, RotateCw } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { useActiveWeek } from "@/hooks/useActiveWeek";
+import { useAlignment } from "@/contexts/AlignmentContext";
 import { runAppAudit, type AuditResult } from "@/services/appAudit";
 
 /**
@@ -17,6 +20,20 @@ export default function DebugIntegrity() {
   const [results, setResults] = useState<AuditResult[]>([]);
   const [explaining, setExplaining] = useState(false);
   const [explanation, setExplanation] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
+  const queryClient = useQueryClient();
+  const { triggerRefresh } = useAlignment();
+
+  // Drop every cached query and bump the Office Summary refresh tick so all
+  // pages refetch fresh data — same effect as a browser reload, without one.
+  const refreshAppData = async () => {
+    setRefreshing(true);
+    triggerRefresh();
+    await queryClient.invalidateQueries();
+    await run();
+    setRefreshing(false);
+    toast.success("App data refreshed");
+  };
 
   const run = async () => {
     setRunning(true);
@@ -76,6 +93,10 @@ export default function DebugIntegrity() {
                 {explaining ? "Asking AI…" : "Explain with AI"}
               </Button>
             )}
+            <Button onClick={refreshAppData} disabled={refreshing || running} size="sm" variant="outline" title="Reload all app data (Office Summary, preparers, offices) without reloading the browser">
+              <RotateCw className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+              {refreshing ? "Refreshing…" : "Refresh App Data"}
+            </Button>
             <Button onClick={run} disabled={running} size="sm" variant="outline">
               <RefreshCw className={`mr-2 h-4 w-4 ${running ? "animate-spin" : ""}`} />
               {running ? "Running…" : "Re-run"}
