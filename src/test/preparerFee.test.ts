@@ -26,6 +26,8 @@ describe("fundingMonthKey", () => {
     expect(fundingMonthKey("3-4-26")).toBe("2026-03");
     expect(fundingMonthKey("2026-03-04")).toBe("2026-03");
     expect(fundingMonthKey(46085)).toBe("2026-03");
+    expect(fundingMonthKey("46085")).toBe("2026-03");
+    expect(fundingMonthKey("Federal")).toBe("");
     expect(fundingMonthKey("")).toBe("");
   });
 });

@@ -373,6 +373,8 @@ export const PREPARER_FEE = 10;
 // and Excel serial numbers. Returns '' if it can't be parsed.
 export function fundingMonthKey(value: unknown): string {
   if (value == null || value === '') return '';
+  // An Excel serial stored as text ("46076") would otherwise parse as year 46076.
+  if (typeof value === 'string' && /^\d+(\.\d+)?$/.test(value.trim())) value = parseFloat(value);
   if (typeof value === 'number' && isFinite(value)) {
     const d = new Date(Math.round((value - 25569) * 86400 * 1000));
     if (!isNaN(d.getTime())) return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
