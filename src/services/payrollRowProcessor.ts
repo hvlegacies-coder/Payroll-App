@@ -55,25 +55,37 @@ const splitClientName = (value: string) => {
   return { lastName: lastName.trim(), firstName: firstNameParts.join(',').trim() };
 };
 
-async function fetchAllRows(uploadIds: string[]): Promise<Record<string, any>[]> {
-  const out: Record<string, any>[] = [];
+/**
+ * Every upload_rows record for the given uploads. Pages past Supabase's
+ * 1000-row response cap in a stable order (without ORDER BY, pages can
+ * overlap or skip rows), and throws on error so no caller ever computes
+ * totals from a partial set.
+ */
+export async function fetchUploadRows<T = { row_data: Record<string, any> }>(
+  uploadIds: string[],
+  columns = 'row_data',
+): Promise<T[]> {
+  const out: T[] = [];
+  const pageSize = 1000;
   for (let i = 0; i < uploadIds.length; i += 10) {
     const batch = uploadIds.slice(i, i + 10);
-    let from = 0;
-    const pageSize = 1000;
-    while (true) {
+    for (let from = 0; ; from += pageSize) {
       const { data, error } = await supabase
         .from('upload_rows')
-        .select('row_data')
+        .select(columns)
         .in('upload_id', batch)
+        .order('id')
         .range(from, from + pageSize - 1);
-      if (error) break;
-      if (data) out.push(...data.map(d => d.row_data as Record<string, any>));
-      if (!data || data.length < pageSize) break;
-      from += pageSize;
+      if (error) throw new Error(`Failed to load upload rows: ${error.message}`);
+      out.push(...(data as unknown as T[]));
+      if (data.length < pageSize) break;
     }
   }
   return out;
+}
+
+export async function fetchAllRows(uploadIds: string[]): Promise<Record<string, any>[]> {
+  return (await fetchUploadRows(uploadIds)).map(d => d.row_data);
 }
 
 export async function fetchPayrollLookups(weekLabel?: string): Promise<PayrollLookups> {
@@ -140,8 +152,9 @@ export async function fetchPayrollLookups(weekLabel?: string): Promise<PayrollLo
       const { data, error } = await supabase
         .from('client_overrides')
         .select('ssn_ein, client_name, client_belongs_to')
+        .order('id')
         .range(from, from + pageSize - 1);
-      if (error) break;
+      if (error) throw new Error(`Failed to load client overrides: ${error.message}`);
       if (data) overridesData.push(...data);
       if (!data || data.length < pageSize) break;
       from += pageSize;
@@ -352,4 +365,39 @@ export function processPayrollRow(raw: Record<string, any>, lookups: PayrollLook
     clientBelongsTo,
     advanceRequested,
   };
+}
+
+export const PREPARER_FEE = 10;
+
+// Parse a funding-date cell into a YYYY-MM key. Handles MM/DD/YYYY, ISO strings,
+// and Excel serial numbers. Returns '' if it can't be parsed.
+export function fundingMonthKey(value: unknown): string {
+  if (value == null || value === '') return '';
+  if (typeof value === 'number' && isFinite(value)) {
+    const d = new Date(Math.round((value - 25569) * 86400 * 1000));
+    if (!isNaN(d.getTime())) return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+    return '';
+  }
+  const s = String(value).trim();
+  if (!s) return '';
+  const m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+  if (m) {
+    const month = parseInt(m[1], 10);
+    let year = parseInt(m[3], 10);
+    if (year < 100) year += 2000;
+    if (month >= 1 && month <= 12) return `${year}-${String(month).padStart(2, '0')}`;
+  }
+  const d = new Date(s);
+  if (!isNaN(d.getTime())) return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  return '';
+}
+
+/**
+ * A preparer's fee for the week: $10 once they earned a share, and at Higher
+ * View $10 per distinct funding-date month. Office Summary and the saved
+ * earnings reports both charge this, so the two always agree.
+ */
+export function preparerFee(taxOffice: string, totalShare: number, fundingMonths: number): number {
+  if (totalShare <= 0) return 0;
+  return taxOffice === 'Higher View' ? PREPARER_FEE * Math.max(1, fundingMonths) : PREPARER_FEE;
 }

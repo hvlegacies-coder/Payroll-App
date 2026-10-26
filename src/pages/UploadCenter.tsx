@@ -14,6 +14,7 @@ import { Progress } from '@/components/ui/progress';
 import { supabase } from '@/integrations/supabase/client';
 import { useActiveWeek } from '@/hooks/useActiveWeek';
 import { generatePreparerWeeklyReports } from '@/services/preparerReportGenerator';
+import { fetchUploadRows } from '@/services/payrollRowProcessor';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { VerificationPanel } from '@/components/payroll/VerificationPanel';
 import { runAppAuditAndNotify } from '@/services/appAudit';
@@ -222,16 +223,7 @@ export default function UploadCenter() {
           .eq('week_label', activeWeek);
 
         if (existingUploads && existingUploads.length > 0) {
-          const existingIds = existingUploads.map(u => u.id);
-          const existingRows: any[] = [];
-          for (let i = 0; i < existingIds.length; i += 10) {
-            const batch = existingIds.slice(i, i + 10);
-            const { data } = await supabase
-              .from('upload_rows')
-              .select('row_data')
-              .in('upload_id', batch);
-            if (data) existingRows.push(...data);
-          }
+          const existingRows = await fetchUploadRows(existingUploads.map(u => u.id));
 
           const existingEntries = existingRows.map(r => {
             const d = r.row_data as Record<string, any>;

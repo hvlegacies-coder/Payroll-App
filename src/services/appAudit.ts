@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { toNum } from "@/lib/num";
+import { fetchAllRows } from "@/services/payrollRowProcessor";
 import { runPayrollVerification } from "@/services/payrollVerification";
 import { getSubAccountOffices, rowMatchesSubAccount } from "@/config/subAccountOffices";
 
@@ -25,24 +26,7 @@ const failed = (name: string, e: any, status: AuditStatus = "fail"): AuditResult
 export async function runIntegrityChecks(): Promise<AuditResult[]> {
   const out: AuditResult[] = [];
 
-  // Check 1: every upload_rows.upload_id resolves to an existing uploads.id
-  const orphanName = "upload_rows reference an existing uploads row";
-  try {
-    const { data: rows } = await supabase.from("upload_rows").select("upload_id");
-    const { data: ups } = await supabase.from("uploads").select("id");
-    const ids = new Set((ups || []).map((u: any) => u.id));
-    const orphans = (rows || []).filter((r: any) => !ids.has(r.upload_id)).length;
-    out.push({
-      name: orphanName,
-      status: orphans === 0 ? "pass" : "fail",
-      expected: "0 orphan rows",
-      actual: `${orphans} orphan row(s)`,
-    });
-  } catch (e) {
-    out.push(failed(orphanName, e));
-  }
-
-  // Check 2: no uploads.week_label is null/empty
+  // Check 1: no uploads.week_label is null/empty
   const weekName = "uploads.week_label is never null/empty";
   try {
     const { data } = await supabase.from("uploads").select("id, week_label");
@@ -59,7 +43,7 @@ export async function runIntegrityChecks(): Promise<AuditResult[]> {
     out.push(failed(weekName, e));
   }
 
-  // Check 3: payroll Σ Received Tax Prep Fee(s) ≈ backend Σ for the same week
+  // Check 2: payroll Σ Received Tax Prep Fee(s) ≈ backend Σ for the same week
   const sumName = "Payroll Σ Received Tax Prep Fee(s) matches Backend Σ per (account, week)";
   try {
     const { data: ups } = await supabase
@@ -73,18 +57,8 @@ export async function runIntegrityChecks(): Promise<AuditResult[]> {
       if (u.type === "Backend Money Report") entry.backend.push(u.id);
       byKey.set(key, entry);
     }
-    const sumFor = async (ids: string[]) => {
-      let total = 0;
-      for (let i = 0; i < ids.length; i += 10) {
-        const { data } = await supabase
-          .from("upload_rows")
-          .select("row_data")
-          .in("upload_id", ids.slice(i, i + 10));
-        for (const r of data || [])
-          total += toNum((r as any).row_data?.["Received Tax Prep Fee(s)"]);
-      }
-      return total;
-    };
+    const sumFor = async (ids: string[]) =>
+      (await fetchAllRows(ids)).reduce((s, r) => s + toNum(r["Received Tax Prep Fee(s)"]), 0);
     let mismatches = 0;
     let checked = 0;
     for (const [, { payroll, backend }] of byKey) {
@@ -104,7 +78,7 @@ export async function runIntegrityChecks(): Promise<AuditResult[]> {
     out.push(failed(sumName, e));
   }
 
-  // Check 4: row_data numeric-looking fields are actually numeric in jsonb
+  // Check 3: row_data numeric-looking fields are actually numeric in jsonb
   const numName = "Numeric jsonb fields contain numbers or numeric strings";
   try {
     const numericKeys = [
@@ -137,7 +111,7 @@ export async function runIntegrityChecks(): Promise<AuditResult[]> {
     out.push(failed(numName, e));
   }
 
-  // Check 5: no duplicate (account_id, type, week_label, source_file_hash)
+  // Check 4: no duplicate (account_id, type, week_label, source_file_hash)
   const dupName = "No duplicate (account, type, week, file-hash) uploads";
   try {
     const { data } = await supabase

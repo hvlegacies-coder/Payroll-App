@@ -17,6 +17,8 @@ import { cn, formatMoney } from '@/lib/utils';
 import { format } from 'date-fns';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
+import { fetchAllRows, fetchUploadRows } from '@/services/payrollRowProcessor';
+import { toast } from 'sonner';
 import { fuzzySimilarity } from '@/services/fuzzyMatch';
 import { useActiveWeek } from '@/hooks/useActiveWeek';
 import { ConfirmDeleteDialog } from '@/components/ConfirmDeleteDialog';
@@ -325,23 +327,7 @@ export default function PayrollProcessing() {
       const uploadIds = uploads.map(u => u.id);
 
       // Fetch all upload_rows for these uploads (paginate to handle >1000)
-      let allRowData: any[] = [];
-      for (let i = 0; i < uploadIds.length; i += 10) {
-        const batch = uploadIds.slice(i, i + 10);
-        let from = 0;
-        const pageSize = 1000;
-        while (true) {
-          const { data, error } = await supabase
-            .from('upload_rows')
-            .select('id, upload_id, row_data')
-            .in('upload_id', batch)
-            .range(from, from + pageSize - 1);
-          if (error) break;
-          if (data) allRowData.push(...data);
-          if (!data || data.length < pageSize) break;
-          from += pageSize;
-        }
-      }
+      let allRowData: any[] = await fetchUploadRows(uploadIds, 'id, upload_id, row_data');
 
       // Fetch offices, preparers, client data, and advance uploads
       const [{ data: offices }, { data: preparersData }, { data: clientUploads }, { data: advanceUploads }] = await Promise.all([
@@ -354,23 +340,7 @@ export default function PayrollProcessing() {
       // Load client data rows
       let clientRows: Record<string, any>[] = [];
       if (clientUploads && clientUploads.length > 0) {
-        const clientUploadIds = clientUploads.map(u => u.id);
-        for (let i = 0; i < clientUploadIds.length; i += 10) {
-          const batch = clientUploadIds.slice(i, i + 10);
-          let from = 0;
-          const pageSize = 1000;
-          while (true) {
-            const { data, error } = await supabase
-              .from('upload_rows')
-              .select('row_data')
-              .in('upload_id', batch)
-              .range(from, from + pageSize - 1);
-            if (error) break;
-            if (data) clientRows.push(...data.map(d => d.row_data as Record<string, any>));
-            if (!data || data.length < pageSize) break;
-            from += pageSize;
-          }
-        }
+        clientRows = await fetchAllRows(clientUploads.map(u => u.id));
       }
 
       // Load advance data rows for matching
@@ -387,8 +357,9 @@ export default function PayrollProcessing() {
               .from('upload_rows')
               .select('row_data')
               .in('upload_id', batch)
+              .order('id')
               .range(from, from + pageSize - 1);
-            if (error) break;
+            if (error) throw new Error(`Failed to load advance rows: ${error.message}`);
             if (data) {
               for (const d of data) {
                 const rd = d.row_data as Record<string, any>;
@@ -467,8 +438,9 @@ export default function PayrollProcessing() {
           const { data, error } = await supabase
             .from('client_overrides')
             .select('ssn_ein, client_name, client_belongs_to')
+            .order('id')
             .range(from, from + pageSize - 1);
-          if (error) break;
+          if (error) throw new Error(`Failed to load client overrides: ${error.message}`);
           if (data) overridesData.push(...data);
           if (!data || data.length < pageSize) break;
           from += pageSize;
@@ -622,8 +594,9 @@ export default function PayrollProcessing() {
       });
       setOfficeLookupState(officeLookup);
       setRows(mapped);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to load payroll rows:', err);
+      toast.error(`Payroll rows failed to load: ${err.message || err}`);
     }
     setLoading(false);
   }, [selectedWeek]);

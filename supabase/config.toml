@@ -1,4 +1,4 @@
-project_id = "hzvdvdjgdvbfqgwyvpub"
+project_id = "csasgyodywfvnycvrbga"
 
 [functions.process-email-queue]
 verify_jwt = true
@@ -32,3 +32,30 @@ verify_jwt = true
 
 [functions.get-referral-payouts]
 verify_jwt = true
+
+[auth]
+additional_redirect_urls = ["https://www.wagevora.com/**", "https://wagevora.com/**", "http://localhost:8080/**"]
+site_url = "https://www.wagevora.com"
+
+[auth.email]
+enable_confirmations = true
+max_frequency = "1m0s"
+otp_length = 8
+
+[auth.mfa.totp]
+enroll_enabled = true
+verify_enabled = true
+
+[db.pooler]
+default_pool_size = 15
+max_client_conn = 200
+
+[db.ssl_enforcement]
+enabled = true
+
+[storage.analytics]
+enabled = true
+max_namespaces = 10
+
+[storage.image_transformation]
+enabled = true

@@ -29,3 +29,6 @@ dist-ssr
 
 .vercel
 .env*
+
+# Database exports (contain user data)
+export/

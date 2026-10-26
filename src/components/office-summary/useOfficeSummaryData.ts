@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { fetchPayrollLookups, type PayrollLookups } from '@/services/payrollRowProcessor';
+import { fetchPayrollLookups, fetchUploadRows, type PayrollLookups } from '@/services/payrollRowProcessor';
 import { buildBackendLookups, type BackendLookups, type FeeConfigEntry, type FeeType as BackendFeeType } from './backendContributors';
 
 export interface OfficesPayload {
@@ -167,22 +167,7 @@ export function useUploadRows(selectedWeek: string | null | undefined, refreshTi
       // Fetch all batches in parallel
       const batchPromises: Promise<{ upload_id: string; row_data: any }[]>[] = [];
       for (let i = 0; i < uploadIds.length; i += 10) {
-        const batch = uploadIds.slice(i, i + 10);
-        batchPromises.push((async () => {
-          const all: { upload_id: string; row_data: any }[] = [];
-          let from = 0;
-          while (true) {
-            const { data } = await supabase
-              .from('upload_rows')
-              .select('upload_id, row_data')
-              .in('upload_id', batch)
-              .range(from, from + 999);
-            if (data?.length) all.push(...data);
-            if (!data || data.length < 1000) break;
-            from += 1000;
-          }
-          return all;
-        })());
+        batchPromises.push(fetchUploadRows(uploadIds.slice(i, i + 10), 'upload_id, row_data'));
       }
       const batchResults = await Promise.all(batchPromises);
       const out: { upload_id: string; row_data: any; dataset: TaggedRowRaw['dataset'] }[] = [];

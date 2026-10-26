@@ -3,9 +3,7 @@
 // report (MyEarnings page) is in sync with the latest payroll data.
 
 import { supabase } from '@/integrations/supabase/client';
-import { fetchPayrollLookups, processPayrollRow } from '@/services/payrollRowProcessor';
-
-const PREPARER_FEE = 10; // flat preparer fee (matches existing Office Summary logic)
+import { fetchAllRows, fetchPayrollLookups, fundingMonthKey, preparerFee, processPayrollRow } from '@/services/payrollRowProcessor';
 
 const num = (v: any): number => {
   if (v === null || v === undefined || v === '') return 0;
@@ -67,36 +65,23 @@ export async function generatePreparerWeeklyReports(weekLabel: string): Promise<
     .eq('week_label', weekLabel);
   if (upErr) throw new Error(`Failed to load uploads: ${upErr.message}`);
   if (!uploads || uploads.length === 0) {
+    await clearReportsExcept(weekLabel, []);
     return { weekLabel, preparersUpdated: 0, rowsProcessed: 0 };
   }
   const uploadIds = uploads.map(u => u.id);
 
   // 2. Fetch all rows for these uploads
-  const allRows: Record<string, any>[] = [];
-  for (let i = 0; i < uploadIds.length; i += 10) {
-    const batch = uploadIds.slice(i, i + 10);
-    let from = 0;
-    const pageSize = 1000;
-    while (true) {
-      const { data, error } = await supabase
-        .from('upload_rows')
-        .select('row_data')
-        .in('upload_id', batch)
-        .range(from, from + pageSize - 1);
-      if (error) break;
-      if (data) allRows.push(...data.map(d => d.row_data as Record<string, any>));
-      if (!data || data.length < pageSize) break;
-      from += pageSize;
-    }
-  }
+  const allRows = await fetchAllRows(uploadIds);
 
   if (allRows.length === 0) {
+    await clearReportsExcept(weekLabel, []);
     return { weekLabel, preparersUpdated: 0, rowsProcessed: 0 };
   }
 
   // Filter by the week's funding date range
   const filteredRows = allRows.filter(inRange);
   if (filteredRows.length === 0) {
+    await clearReportsExcept(weekLabel, []);
     return { weekLabel, preparersUpdated: 0, rowsProcessed: 0 };
   }
 
@@ -114,6 +99,7 @@ export async function generatePreparerWeeklyReports(weekLabel: string): Promise<
     total_after_advance: number;
     total_pay: number;
     total_preparer_share: number;
+    funding_months: Set<string>;
   };
 
   const byPtin = new Map<string, PreparerBucket>();
@@ -139,6 +125,7 @@ export async function generatePreparerWeeklyReports(weekLabel: string): Promise<
         total_after_advance: 0,
         total_pay: 0,
         total_preparer_share: 0,
+        funding_months: new Set(),
       };
       byPtin.set(ptinKey, bucket);
     }
@@ -164,11 +151,13 @@ export async function generatePreparerWeeklyReports(weekLabel: string): Promise<
     bucket.total_after_advance += processed.afterAdvance;
     bucket.total_pay += processed.pay;
     bucket.total_preparer_share += processed.preparerShare;
+    const month = fundingMonthKey(getField(raw, 'Funding Date'));
+    if (month) bucket.funding_months.add(month);
   }
 
   // 5. Upsert one row per preparer
   const records = Array.from(byPtin.values()).map(b => {
-    const preparer_fee = b.rows.length * PREPARER_FEE;
+    const preparer_fee = preparerFee(b.tax_office, b.total_preparer_share, b.funding_months.size);
     const total_share = b.total_preparer_share - preparer_fee;
     return {
       week_label: weekLabel,
@@ -196,5 +185,18 @@ export async function generatePreparerWeeklyReports(weekLabel: string): Promise<
     if (error) throw new Error(`Failed to save preparer reports: ${error.message}`);
   }
 
+  await clearReportsExcept(weekLabel, records.map(r => r.ptin));
+
   return { weekLabel, preparersUpdated: records.length, rowsProcessed };
+}
+
+// Drop the week's reports for preparers no longer in its payroll (deleted
+// upload, reassigned rows) so stale earnings are never shown or emailed.
+async function clearReportsExcept(weekLabel: string, keepPtins: string[]) {
+  let query = supabase.from('preparer_payroll_weeks').delete().eq('week_label', weekLabel);
+  if (keepPtins.length > 0) {
+    query = query.not('ptin', 'in', `(${keepPtins.map(p => `"${p.replace(/"/g, '')}"`).join(',')})`);
+  }
+  const { error } = await query;
+  if (error) throw new Error(`Failed to clear old preparer reports: ${error.message}`);
 }

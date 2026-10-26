@@ -279,8 +279,8 @@ const categories: Category[] = [
         term: 'Preparer Fee Total',
         plain: 'Total Fixed Fees Charged Across All Preparers',
         type: 'calculated',
-        desc: 'The sum of the per-preparer fixed fee (default $25 for Higher View) across all preparers at this office this week. Charged once per preparer regardless of how many clients they served.',
-        example: '8 preparers × $25 = $200 total preparer fees',
+        desc: 'The sum of the $10 per-preparer fee across all preparers at this office this payroll run. Charged once per preparer who earned a share, regardless of how many clients they served (Higher View: $10 per funding-date month).',
+        example: '8 preparers × $10 = $80 total preparer fees',
         where: 'Office Summary → Total Fees Due',
       },
       {

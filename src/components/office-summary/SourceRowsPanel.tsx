@@ -6,7 +6,8 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { cn, formatMoney as fmtMoney } from '@/lib/utils';
-import { fetchPayrollLookups, processPayrollRow, type PayrollLookups, type ProcessedPayrollRow } from '@/services/payrollRowProcessor';
+import { fetchAllRows, fetchPayrollLookups, processPayrollRow, type PayrollLookups, type ProcessedPayrollRow } from '@/services/payrollRowProcessor';
+import { toast } from 'sonner';
 import { officeMatches, getConsolidatedOffices } from '@/services/types';
 import { useAlignmentOptional, type SourceTotal } from '@/contexts/AlignmentContext';
 import {
@@ -303,24 +304,7 @@ export function SourceRowsPanel({ officeScope, onExportData }: Props) {
           .eq('type', UPLOAD_TYPE[key])
           .eq('week_label', selectedWeek);
         if (!uploads || uploads.length === 0) return [];
-        const ids = uploads.map(u => u.id);
-        const collected: Record<string, any>[] = [];
-        for (let i = 0; i < ids.length; i += 10) {
-          const batch = ids.slice(i, i + 10);
-          let from = 0;
-          while (true) {
-            const { data, error } = await supabase
-              .from('upload_rows')
-              .select('row_data')
-              .in('upload_id', batch)
-              .range(from, from + 999);
-            if (error) break;
-            if (data) collected.push(...data.map(d => d.row_data as Record<string, any>));
-            if (!data || data.length < 1000) break;
-            from += 1000;
-          }
-        }
-        return collected;
+        return fetchAllRows(uploads.map(u => u.id));
       };
       const [lk, payroll, backend, fee_intercept, officesRes, preparersRes, configRowsRes] = await Promise.all([
         fetchPayrollLookups(selectedWeek),
@@ -358,7 +342,11 @@ export function SourceRowsPanel({ officeScope, onExportData }: Props) {
         setConfigsBySource(allConfigs);
         setLoading(false);
       }
-    })();
+    })().catch(err => {
+      if (cancelled) return;
+      setLoading(false);
+      toast.error(`Source rows failed to load: ${err.message || err}`);
+    });
     return () => { cancelled = true; };
   }, [selectedWeek, refreshTick]);
 

@@ -6,7 +6,8 @@ import { cn, formatMoney as fmt } from '@/lib/utils';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
-import { fetchPayrollLookups, processPayrollRow, type PayrollLookups } from '@/services/payrollRowProcessor';
+import { fetchAllRows, fetchPayrollLookups, fundingMonthKey, preparerFee, processPayrollRow, type PayrollLookups } from '@/services/payrollRowProcessor';
+import { toast } from 'sonner';
 import { officeMatches } from '@/services/types';
 import { getConsolidatedOffices } from '@/services/types';
 import { SourceTotalBadge } from './SourceTotalBadge';
@@ -16,8 +17,6 @@ interface Props {
   onTotalChange?: (total: number) => void;
   onExportData?: (rows: { name: string; fee: number; net: number }[]) => void;
 }
-
-const PREPARER_FEE = 10;
 
 // Same parser used by BackendFeeTable / SourceRowsPanel so date scoping is identical.
 function parseFundingDateStr(v: any): Date | null {
@@ -44,29 +43,6 @@ function parseFundingDateStr(v: any): Date | null {
   return isNaN(d.getTime()) ? null : d;
 }
 
-
-// Parse a funding-date cell into a YYYY-MM key. Handles MM/DD/YYYY, ISO strings,
-// and Excel serial numbers. Returns '' if it can't be parsed.
-function fundingMonthKey(value: unknown): string {
-  if (value == null || value === '') return '';
-  if (typeof value === 'number' && isFinite(value)) {
-    const d = new Date(Math.round((value - 25569) * 86400 * 1000));
-    if (!isNaN(d.getTime())) return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
-    return '';
-  }
-  const s = String(value).trim();
-  if (!s) return '';
-  const m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
-  if (m) {
-    const month = parseInt(m[1], 10);
-    let year = parseInt(m[3], 10);
-    if (year < 100) year += 2000;
-    if (month >= 1 && month <= 12) return `${year}-${String(month).padStart(2, '0')}`;
-  }
-  const d = new Date(s);
-  if (!isNaN(d.getTime())) return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-  return '';
-}
 
 export function PreparersShareTable({ officeScope, onTotalChange, onExportData }: Props) {
   const { selectedWeek, selectedWeekRange } = useActiveWeek();
@@ -246,23 +222,7 @@ export function PreparersShareTable({ officeScope, onTotalChange, onExportData }
         return;
       }
 
-      const uploadIds = uploads.map(u => u.id);
-      const all: Record<string, any>[] = [];
-      for (let i = 0; i < uploadIds.length; i += 10) {
-        const batch = uploadIds.slice(i, i + 10);
-        let from = 0;
-        while (true) {
-          const { data, error } = await supabase
-            .from('upload_rows')
-            .select('row_data')
-            .in('upload_id', batch)
-            .range(from, from + 999);
-          if (error) break;
-          if (data) all.push(...data.map(d => d.row_data as Record<string, any>));
-          if (!data || data.length < 1000) break;
-          from += 1000;
-        }
-      }
+      const all = await fetchAllRows(uploads.map(u => u.id));
 
       // Apply Funding Date range filter so preparer share aligns with the
       // backend tiles / Source Rows panel (which scope by the same range).
@@ -282,7 +242,12 @@ export function PreparersShareTable({ officeScope, onTotalChange, onExportData }
         });
       }
       if (!cancelled) { setLookups(lk); setRows(filtered); setLoading(false); }
-    })();
+    })().catch(err => {
+      if (cancelled) return;
+      setRows([]);
+      setLoading(false);
+      toast.error(`Preparer share failed to load: ${err.message || err}`);
+    });
     return () => { cancelled = true; };
   }, [officeScope, selectedWeek, selectedWeekRange?.from, selectedWeekRange?.to]);
 
@@ -327,11 +292,7 @@ export function PreparersShareTable({ officeScope, onTotalChange, onExportData }
 
   const netTotals = useMemo(
     () => totals.map(t => {
-      let fee = t.total > 0 ? PREPARER_FEE : 0;
-      // Higher View: $10 per distinct funding-date month the preparer has rows in.
-      if (fee > 0 && officeScope === 'Higher View') {
-        fee = PREPARER_FEE * Math.max(1, t.monthCount);
-      }
+      let fee = preparerFee(officeScope, t.total, t.monthCount);
       if (Object.prototype.hasOwnProperty.call(feeOverrides, t.name)) {
         fee = feeOverrides[t.name];
       }

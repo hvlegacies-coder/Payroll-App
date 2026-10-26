@@ -1,5 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { fetchUploadRows } from '@/services/payrollRowProcessor';
+import { toast } from 'sonner';
 import { useActiveWeek } from '@/hooks/useActiveWeek';
 import { Loader2 } from 'lucide-react';
 import { cn, formatMoney as fmt } from '@/lib/utils';
@@ -297,23 +299,7 @@ export function BackendFeeTable({ officeScope, onTotalsChange, hiddenFeeTypes = 
         return;
       }
 
-      const uploadIds = uploads.map(u => u.id);
-      let allRows: any[] = [];
-      for (let i = 0; i < uploadIds.length; i += 10) {
-        const batch = uploadIds.slice(i, i + 10);
-        let from = 0;
-        while (true) {
-          const { data, error } = await supabase
-            .from('upload_rows')
-            .select('row_data')
-            .in('upload_id', batch)
-            .range(from, from + 999);
-          if (error) break;
-          if (data) allRows.push(...data);
-          if (!data || data.length < 1000) break;
-          from += 1000;
-        }
-      }
+      let allRows: any[] = await fetchUploadRows(uploads.map(u => u.id));
 
       // Apply Funding Date range filter so tile totals align with the
       // Source Rows panel footer (which scopes by the same range).
@@ -410,7 +396,11 @@ export function BackendFeeTable({ officeScope, onTotalsChange, hiddenFeeTypes = 
         setOfficeParents(officeParent);
         setLoading(false);
       }
-    })();
+    })().catch(err => {
+      if (cancelled) return;
+      setLoading(false);
+      toast.error(`Backend fees failed to load: ${err.message || err}`);
+    });
     return () => { cancelled = true; };
   }, [officeScope, selectedWeek, selectedWeekRange?.from, selectedWeekRange?.to]);
 

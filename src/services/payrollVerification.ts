@@ -1,5 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
-import { fetchPayrollLookups } from '@/services/payrollRowProcessor';
+import { fetchAllRows, fetchPayrollLookups } from '@/services/payrollRowProcessor';
 import { fuzzySimilarity } from '@/services/fuzzyMatch';
 
 export type CheckSeverity = 'error' | 'warning' | 'info';
@@ -93,23 +93,7 @@ function formatMaybeExcelDate(value: string): string {
   return `${d.getUTCMonth() + 1}/${d.getUTCDate()}/${d.getUTCFullYear()}`;
 }
 
-async function fetchRowsForUpload(uploadId: string): Promise<Record<string, any>[]> {
-  const rows: Record<string, any>[] = [];
-  let from = 0;
-  const PAGE = 1000;
-  while (true) {
-    const { data, error } = await supabase
-      .from('upload_rows')
-      .select('row_data')
-      .eq('upload_id', uploadId)
-      .range(from, from + PAGE - 1);
-    if (error || !data) break;
-    rows.push(...data.map((d: any) => d.row_data as Record<string, any>));
-    if (data.length < PAGE) break;
-    from += PAGE;
-  }
-  return rows;
-}
+const fetchRowsForUpload = (uploadId: string) => fetchAllRows([uploadId]);
 
 function pass(id: string, category: VerificationCheck['category'], severity: CheckSeverity, title: string, description: string): VerificationCheck {
   return { id, category, severity, status: 'pass', title, description, affectedCount: 0, details: [] };

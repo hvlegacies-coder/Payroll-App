@@ -7,6 +7,7 @@ import { DetailDrawer } from '@/components/payroll/DetailDrawer';
 import { Button } from '@/components/ui/button';
 import { DollarSign, FileDown, Loader2, Trash2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { fetchUploadRows } from '@/services/payrollRowProcessor';
 import { useActiveWeek } from '@/hooks/useActiveWeek';
 import { formatMoney } from '@/lib/utils';
 import {
@@ -233,22 +234,7 @@ export default function BackendTable() {
       const uploadIds = uploads.map(u => u.id);
 
       // Fetch upload_rows
-      let allRowData: any[] = [];
-      for (let i = 0; i < uploadIds.length; i += 10) {
-        const batch = uploadIds.slice(i, i + 10);
-        let from = 0;
-        while (true) {
-          const { data, error } = await supabase
-            .from('upload_rows')
-            .select('id, upload_id, row_data')
-            .in('upload_id', batch)
-            .range(from, from + 999);
-          if (error) break;
-          if (data) allRowData.push(...data);
-          if (!data || data.length < 1000) break;
-          from += 1000;
-        }
-      }
+      let allRowData: any[] = await fetchUploadRows(uploadIds, 'id, upload_id, row_data');
 
       // Fetch offices and preparers for Tax Office lookup
       const [{ data: offices }, { data: preparersData }] = await Promise.all([
@@ -314,8 +300,9 @@ export default function BackendTable() {
         return row;
       });
       setRows(mapped);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to load backend rows:', err);
+      toast({ title: 'Backend rows failed to load', description: err.message || String(err), variant: 'destructive' });
     }
     setLoading(false);
   }, [selectedWeek]);

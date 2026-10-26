@@ -6,6 +6,8 @@ import { DataTable, Column } from '@/components/payroll/DataTable';
 import { DetailDrawer } from '@/components/payroll/DetailDrawer';
 import { DollarSign, FileText, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { fetchUploadRows } from '@/services/payrollRowProcessor';
+import { toast } from 'sonner';
 import { useActiveWeek } from '@/hooks/useActiveWeek';
 import { formatMoney } from '@/lib/utils';
 
@@ -84,14 +86,14 @@ export default function FeeIntercept() {
     uploads.forEach(u => { uploadMap[u.id] = u.uploaded_date; });
     const uploadIds = uploads.map(u => u.id);
 
-    let allUploadRows: any[] = [];
-    for (let i = 0; i < uploadIds.length; i += 10) {
-      const batch = uploadIds.slice(i, i + 10);
-      const { data } = await supabase
-        .from('upload_rows')
-        .select('*')
-        .in('upload_id', batch);
-      if (data) allUploadRows.push(...data);
+    let allUploadRows: any[];
+    try {
+      allUploadRows = await fetchUploadRows<any>(uploadIds, '*');
+    } catch (err: any) {
+      toast.error(`Fee intercept rows failed to load: ${err.message || err}`);
+      setRows([]);
+      setLoading(false);
+      return;
     }
 
     const mapped: FeeInterceptRow[] = allUploadRows.map((ur, idx) => {

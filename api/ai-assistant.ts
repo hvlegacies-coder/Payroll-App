@@ -38,7 +38,7 @@ KEY TERMS & FIELD DEFINITIONS
 ═══════════════════════════════════════
 PTIN — Preparer Tax ID Number. Unique IRS-issued ID per tax preparer (e.g. P01234567). Every payroll row is linked to a preparer via PTIN.
 
-EFIN — Electronic Filing ID Number. 6-digit IRS number identifying a tax office location. One office can have a primary EFIN and a secondary EFIN. Office EFINs: D&D=381268, PowerPlay=381623, S&C=385634, King J=741288.
+EFIN — Electronic Filing ID Number. 6-digit IRS number identifying a tax office location. One office can have a primary EFIN and a secondary EFIN. Office EFINs: D&D=383167 (also 381268, 387641), PowerPlay=381623, S&C=385554 (also 381871), King J=741288, Higher View=313520 (also 310594).
 
 Contractor — The tax preparer's full legal name.
 
@@ -130,7 +130,7 @@ All other offices (D&D, PowerPlay, S&C, etc.):
   preparer_share = pay
 
 FEES:
-Preparer Fee (Higher View only): $25 per preparer per payroll run
+Preparer Fee: $10 per preparer per payroll run, charged only when the preparer earned a share (Higher View: $10 per funding-date month)
 Transmitter Fee: credited = max(0, transmitter_fee − 10) per row
 Backend Money: sum of received_amount from Backend Money Report per office
 Fee Intercept: matched by EFIN → office, aggregated per office
@@ -149,14 +149,14 @@ D&D SPECIAL RULE: Tax Champions rows are automatically folded into D&D totals.
 SYSTEM CONSTANTS:
 - Advance fee: $100 per client
 - Transmitter threshold: $10 (office keeps amount above $10)
-- Higher View preparer fee: $25 per preparer
+- Preparer fee: $10 per preparer per payroll run
 - Email batch size: 10 messages per cycle, 200ms delay between sends
 - Transactional email TTL: 60 minutes
 - Auth email TTL: 15 minutes
 
 OFFICES: Higher View, D & D, PowerPlay, S & C, King J, Main Event, Tax Champions, Bright Meadow, Malone Method Tax Services, Premier Tax Software, Prolific Legacy, Clarity Tax Group, S&D Tax Solutions, R'Moni, Savvy Tax Pros, SmartFile, Stellar Tax Co, Tygermatic Taxes, Pink Connection, Big Payback, Go Up Financials
 
-EFIN ASSIGNMENTS: D&D=381268, PowerPlay=381623, S&C=385634, King J=741288
+EFIN ASSIGNMENTS: D&D=383167 (also 381268, 387641), PowerPlay=381623, S&C=385554 (also 381871), King J=741288, Higher View=313520 (also 310594)
 
 ═══════════════════════════════════════
 RESPONSE STYLE

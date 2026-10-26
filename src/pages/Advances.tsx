@@ -9,6 +9,8 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Banknote, CheckCircle, AlertTriangle, XCircle, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
+import { fetchUploadRows } from '@/services/payrollRowProcessor';
+import { toast } from 'sonner';
 import { useActiveWeek } from '@/hooks/useActiveWeek';
 import { isAdvanceDuplicate } from '@/services/fuzzyMatch';
 import { formatMoney } from '@/lib/utils';
@@ -94,15 +96,14 @@ export default function Advances() {
     const uploadIds = uploads.map(u => u.id);
 
     // Fetch all rows for these uploads
-    const allRows: any[] = [];
-    for (let i = 0; i < uploadIds.length; i += 10) {
-      const batch = uploadIds.slice(i, i + 10);
-      const { data } = await supabase
-        .from('upload_rows')
-        .select('*')
-        .in('upload_id', batch)
-        .order('row_index', { ascending: true });
-      if (data) allRows.push(...data);
+    let allRows: any[];
+    try {
+      allRows = (await fetchUploadRows<any>(uploadIds, '*')).sort((a, b) => a.row_index - b.row_index);
+    } catch (err: any) {
+      toast.error(`Advance rows failed to load: ${err.message || err}`);
+      setRows([]);
+      setLoading(false);
+      return;
     }
 
     // Map raw rows to AdvanceRow
