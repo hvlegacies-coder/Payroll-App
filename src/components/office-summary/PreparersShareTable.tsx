@@ -18,6 +18,41 @@ interface Props {
   onExportData?: (rows: { name: string; fee: number; net: number }[]) => void;
 }
 
+// Manual edits live in preparer_share_state (one row per key below) so every
+// admin sees the same totals. Last save wins if two admins edit one map at once.
+const STATE_PREFIXES = [
+  'preparerFeeOverrides:', 'preparerFeeColors:', 'preparerFeeNotes:', 'preparerFeeHistory:',
+  'preparerShareOverrides:', 'preparerShareColors:', 'preparerShareNotes:',
+];
+// Not in the generated Supabase types yet.
+const stateTable = () => (supabase as any).from('preparer_share_state');
+
+async function saveState(key: string, value: unknown) {
+  const { error } = await stateTable().upsert({ key, value, updated_at: new Date().toISOString() });
+  if (error) toast.error(`Could not save preparer share edit: ${error.message}`);
+}
+
+// One-time move of edits this browser saved before they were stored in the
+// database. Never overwrites a key the database already has.
+let localImport: Promise<void> | null = null;
+function importLocalState(): Promise<void> {
+  if (!localImport) {
+    localImport = (async () => {
+      const rows: { key: string; value: unknown }[] = [];
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (!key || !STATE_PREFIXES.some(p => key.startsWith(p))) continue;
+          const value = JSON.parse(localStorage.getItem(key) || '{}');
+          if (value && Object.keys(value).length > 0) rows.push({ key, value });
+        }
+      } catch { return; }
+      if (rows.length > 0) await stateTable().upsert(rows, { onConflict: 'key', ignoreDuplicates: true });
+    })();
+  }
+  return localImport;
+}
+
 // Same parser used by BackendFeeTable / SourceRowsPanel so date scoping is identical.
 function parseFundingDateStr(v: any): Date | null {
   if (v === null || v === undefined || v === '') return null;
@@ -97,68 +132,59 @@ export function PreparersShareTable({ officeScope, onTotalChange, onExportData }
   );
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(overrideKey);
-      setFeeOverrides(raw ? JSON.parse(raw) : {});
-    } catch { setFeeOverrides({}); }
-    try {
-      const raw = localStorage.getItem(colorKey);
-      setFeeColors(raw ? JSON.parse(raw) : {});
-    } catch { setFeeColors({}); }
-    try {
-      const raw = localStorage.getItem(noteKey);
-      setFeeNotes(raw ? JSON.parse(raw) : {});
-    } catch { setFeeNotes({}); }
-    try {
-      const raw = localStorage.getItem(historyKey);
-      setFeeHistory(raw ? JSON.parse(raw) : {});
-    } catch { setFeeHistory({}); }
-    try {
-      const raw = localStorage.getItem(shareOverrideKey);
-      setShareOverrides(raw ? JSON.parse(raw) : {});
-    } catch { setShareOverrides({}); }
-    try {
-      const raw = localStorage.getItem(shareColorKey);
-      setShareColors(raw ? JSON.parse(raw) : {});
-    } catch { setShareColors({}); }
-    try {
-      const raw = localStorage.getItem(shareNoteKey);
-      setShareNotes(raw ? JSON.parse(raw) : {});
-    } catch { setShareNotes({}); }
+    let cancelled = false;
+    setFeeOverrides({}); setFeeColors({}); setFeeNotes({}); setFeeHistory({});
+    setShareOverrides({}); setShareColors({}); setShareNotes({});
+    (async () => {
+      await importLocalState();
+      const { data, error } = await stateTable()
+        .select('key, value')
+        .in('key', [overrideKey, colorKey, noteKey, historyKey, shareOverrideKey, shareColorKey, shareNoteKey]);
+      if (cancelled) return;
+      if (error) { toast.error(`Preparer share edits failed to load: ${error.message}`); return; }
+      const byKey = new Map<string, any>((data || []).map((r: any) => [r.key, r.value]));
+      const get = (k: string) => byKey.get(k) || {};
+      setFeeOverrides(get(overrideKey));
+      setFeeColors(get(colorKey));
+      setFeeNotes(get(noteKey));
+      setFeeHistory(get(historyKey));
+      setShareOverrides(get(shareOverrideKey));
+      setShareColors(get(shareColorKey));
+      setShareNotes(get(shareNoteKey));
+    })();
+    return () => { cancelled = true; };
   }, [overrideKey, colorKey, noteKey, historyKey, shareOverrideKey, shareColorKey, shareNoteKey]);
 
   const saveOverrides = (next: Record<string, number>) => {
     setFeeOverrides(next);
-    try { localStorage.setItem(overrideKey, JSON.stringify(next)); } catch {}
+    saveState(overrideKey, next);
   };
   const saveShareOverrides = (next: Record<string, number>) => {
     setShareOverrides(next);
-    try { localStorage.setItem(shareOverrideKey, JSON.stringify(next)); } catch {}
+    saveState(shareOverrideKey, next);
   };
   const saveShareColors = (next: Record<string, 'default' | 'purple'>) => {
     setShareColors(next);
-    try { localStorage.setItem(shareColorKey, JSON.stringify(next)); } catch {}
+    saveState(shareColorKey, next);
   };
   const saveShareNotes = (next: Record<string, string>) => {
     setShareNotes(next);
-    try { localStorage.setItem(shareNoteKey, JSON.stringify(next)); } catch {}
+    saveState(shareNoteKey, next);
   };
   const saveColors = (next: Record<string, 'default' | 'purple'>) => {
     setFeeColors(next);
-    try { localStorage.setItem(colorKey, JSON.stringify(next)); } catch {}
+    saveState(colorKey, next);
   };
   const saveNotes = (next: Record<string, string>) => {
     setFeeNotes(next);
-    try { localStorage.setItem(noteKey, JSON.stringify(next)); } catch {}
+    saveState(noteKey, next);
   };
   const appendHistory = (name: string, action: string, detail?: string) => {
     const actor = (typeof window !== 'undefined' && localStorage.getItem('hvt_user')) || 'anonymous';
     const entry = { actor, at: new Date().toISOString(), action, detail };
-    setFeeHistory(prev => {
-      const next = { ...prev, [name]: [entry, ...(prev[name] || [])].slice(0, 50) };
-      try { localStorage.setItem(historyKey, JSON.stringify(next)); } catch {}
-      return next;
-    });
+    const next = { ...feeHistory, [name]: [entry, ...(feeHistory[name] || [])].slice(0, 50) };
+    setFeeHistory(next);
+    saveState(historyKey, next);
   };
 
   // Build EFIN set for the scope office + all descendants that share an EFIN.
