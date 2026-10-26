@@ -3,7 +3,7 @@
 // report (MyEarnings page) is in sync with the latest payroll data.
 
 import { supabase } from '@/integrations/supabase/client';
-import { fetchAllRows, fetchPayrollLookups, fundingMonthKey, preparerFee, processPayrollRow } from '@/services/payrollRowProcessor';
+import { fetchAllRows, fetchPayrollLookups, fundingMonthKey, makeFundingRangeFilter, preparerFee, processPayrollRow } from '@/services/payrollRowProcessor';
 
 const num = (v: any): number => {
   if (v === null || v === undefined || v === '') return 0;
@@ -32,30 +32,8 @@ export async function generatePreparerWeeklyReports(weekLabel: string): Promise<
     .select('funding_date_from, funding_date_to')
     .eq('label', weekLabel)
     .maybeSingle();
-  const parseDateStr = (v: any): Date | null => {
-    if (!v) return null;
-    const s = String(v);
-    const m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
-    if (m) { let y = parseInt(m[3], 10); if (y < 100) y += 2000; return new Date(y, parseInt(m[1], 10) - 1, parseInt(m[2], 10)); }
-    const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
-    if (iso) return new Date(parseInt(iso[1], 10), parseInt(iso[2], 10) - 1, parseInt(iso[3], 10));
-    const d = new Date(s);
-    return isNaN(d.getTime()) ? null : d;
-  };
-  let lo = weekRow?.funding_date_from ? parseDateStr(weekRow.funding_date_from) || undefined : undefined;
-  let hi = weekRow?.funding_date_to ? parseDateStr(weekRow.funding_date_to) || undefined : undefined;
-  if (lo && hi && lo.getTime() > hi.getTime()) { const t = lo; lo = hi; hi = t; }
-  if (lo) lo.setHours(0, 0, 0, 0);
-  if (hi) hi.setHours(23, 59, 59, 999);
-  const rangeActive = !!(lo || hi);
-  const inRange = (raw: Record<string, any>): boolean => {
-    if (!rangeActive) return true;
-    const fd = parseDateStr(getField(raw, 'Funding Date'));
-    if (!fd) return false;
-    if (lo && fd.getTime() < lo.getTime()) return false;
-    if (hi && fd.getTime() > hi.getTime()) return false;
-    return true;
-  };
+  const rangeFilter = makeFundingRangeFilter(weekRow?.funding_date_from, weekRow?.funding_date_to);
+  const inRange = (raw: Record<string, any>): boolean => !rangeFilter || rangeFilter(getField(raw, 'Funding Date'));
 
   // 1. Fetch payroll uploads for this week
   const { data: uploads, error: upErr } = await supabase

@@ -6,7 +6,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { cn, formatMoney as fmtMoney } from '@/lib/utils';
-import { fetchAllRows, fetchPayrollLookups, processPayrollRow, type PayrollLookups, type ProcessedPayrollRow } from '@/services/payrollRowProcessor';
+import { fetchAllRows, fetchPayrollLookups, makeFundingRangeFilter, processPayrollRow, type PayrollLookups, type ProcessedPayrollRow } from '@/services/payrollRowProcessor';
 import { toast } from 'sonner';
 import { officeMatches, getConsolidatedOffices } from '@/services/types';
 import { useAlignmentOptional, type SourceTotal } from '@/contexts/AlignmentContext';
@@ -84,34 +84,6 @@ const FEE_COL_HEADER: Record<FeeType, string> = {
 };
 
 const PAGE_SIZE = 25;
-
-function parseFundingDateStr(v: any): Date | null {
-  if (!v) return null;
-  // Eastern-time anchored: keeps date scoping consistent for viewers in any
-  // timezone (matches useOfficeSummaryData / Backend Fee Table).
-  const toEastern = (y: number, mo: number, d: number) =>
-    new Date(Date.UTC(y, mo, d, 5, 0, 0));
-  if (typeof v === 'number' && v > 20000 && v < 80000) {
-    return new Date(Date.UTC(1899, 11, 30) + v * 86400000);
-  }
-  const s = String(v);
-  if (/^\d+(\.\d+)?$/.test(s)) {
-    const n = parseFloat(s);
-    if (n > 20000 && n < 80000) {
-      return new Date(Date.UTC(1899, 11, 30) + n * 86400000);
-    }
-  }
-  const m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
-  if (m) {
-    let y = parseInt(m[3], 10);
-    if (y < 100) y += 2000;
-    return toEastern(y, parseInt(m[1], 10) - 1, parseInt(m[2], 10));
-  }
-  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (iso) return toEastern(parseInt(iso[1], 10), parseInt(iso[2], 10) - 1, parseInt(iso[3], 10));
-  const d = new Date(s);
-  return isNaN(d.getTime()) ? null : d;
-}
 
 function parseNum(v: any): number {
   if (v === null || v === undefined || v === '') return 0;
@@ -381,19 +353,9 @@ export function SourceRowsPanel({ officeScope, onExportData }: Props) {
     // have no Funding Date column, so they're scoped by week_label only —
     // when a narrower date range is ever applied, Fee Intercept can't
     // honor it row-by-row and the tab will show an explanatory empty state.
-    if (key !== 'fee_intercept' && selectedWeekRange && (selectedWeekRange.from || selectedWeekRange.to)) {
-      let lo = selectedWeekRange.from ? parseFundingDateStr(selectedWeekRange.from) : null;
-      let hi = selectedWeekRange.to ? parseFundingDateStr(selectedWeekRange.to) : null;
-      if (lo && hi && lo.getTime() > hi.getTime()) { const t = lo; lo = hi; hi = t; }
-      if (lo) lo.setHours(0, 0, 0, 0);
-      if (hi) hi.setHours(23, 59, 59, 999);
-      allRows = allRows.filter(r => {
-        const fd = parseFundingDateStr(getVal(r, 'Funding Date'));
-        if (!fd) return false;
-        if (lo && fd.getTime() < lo.getTime()) return false;
-        if (hi && fd.getTime() > hi.getTime()) return false;
-        return true;
-      });
+    const inRange = key !== 'fee_intercept' ? makeFundingRangeFilter(selectedWeekRange?.from, selectedWeekRange?.to) : null;
+    if (inRange) {
+      allRows = allRows.filter(r => inRange(getVal(r, 'Funding Date')));
     }
     if (key === 'payroll') {
       if (!lookups) return [];

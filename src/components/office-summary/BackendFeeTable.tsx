@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { fetchUploadRows } from '@/services/payrollRowProcessor';
+import { fetchUploadRows, makeFundingRangeFilter } from '@/services/payrollRowProcessor';
 import { toast } from 'sonner';
 import { useActiveWeek } from '@/hooks/useActiveWeek';
 import { Loader2 } from 'lucide-react';
@@ -8,31 +8,6 @@ import { cn, formatMoney as fmt } from '@/lib/utils';
 import { SourceTotalBadge } from './SourceTotalBadge';
 
 type FeeType = 'E-File Fee(s)' | 'E-File Downlines' | 'Service Bureau Fee' | 'ERO3Fee' | 'Transmitter Fee' | 'E-File-EFIN' | 'ERO3-EFIN';
-
-// Same parser used by SourceRowsPanel so date scoping is identical.
-function parseFundingDateStr(v: any): Date | null {
-  if (v === null || v === undefined || v === '') return null;
-  if (typeof v === 'number' && v > 20000 && v < 80000) {
-    return new Date(Date.UTC(1899, 11, 30) + v * 86400000);
-  }
-  const s = String(v);
-  if (/^\d+(\.\d+)?$/.test(s)) {
-    const n = parseFloat(s);
-    if (n > 20000 && n < 80000) {
-      return new Date(Date.UTC(1899, 11, 30) + n * 86400000);
-    }
-  }
-  const m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
-  if (m) {
-    let y = parseInt(m[3], 10);
-    if (y < 100) y += 2000;
-    return new Date(y, parseInt(m[1], 10) - 1, parseInt(m[2], 10));
-  }
-  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (iso) return new Date(parseInt(iso[1], 10), parseInt(iso[2], 10) - 1, parseInt(iso[3], 10));
-  const d = new Date(s);
-  return isNaN(d.getTime()) ? null : d;
-}
 
 const FEE_TYPES: FeeType[] = ['E-File Fee(s)', 'E-File Downlines', 'Service Bureau Fee', 'ERO3Fee', 'Transmitter Fee', 'E-File-EFIN', 'ERO3-EFIN'];
 
@@ -303,19 +278,11 @@ export function BackendFeeTable({ officeScope, onTotalsChange, hiddenFeeTypes = 
 
       // Apply Funding Date range filter so tile totals align with the
       // Source Rows panel footer (which scopes by the same range).
-      if (selectedWeekRange && (selectedWeekRange.from || selectedWeekRange.to)) {
-        let lo = selectedWeekRange.from ? parseFundingDateStr(selectedWeekRange.from) : null;
-        let hi = selectedWeekRange.to ? parseFundingDateStr(selectedWeekRange.to) : null;
-        if (lo && hi && lo.getTime() > hi.getTime()) { const t = lo; lo = hi; hi = t; }
-        if (lo) lo.setHours(0, 0, 0, 0);
-        if (hi) hi.setHours(23, 59, 59, 999);
+      const inRange = makeFundingRangeFilter(selectedWeekRange?.from, selectedWeekRange?.to);
+      if (inRange) {
         allRows = allRows.filter(r => {
           const data = (typeof r.row_data === 'object' && r.row_data) ? r.row_data as Record<string, any> : {};
-          const fd = parseFundingDateStr(data['Funding Date']);
-          if (!fd) return false;
-          if (lo && fd.getTime() < lo.getTime()) return false;
-          if (hi && fd.getTime() > hi.getTime()) return false;
-          return true;
+          return inRange(data['Funding Date']);
         });
       }
 

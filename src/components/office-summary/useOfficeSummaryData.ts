@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { fetchPayrollLookups, fetchUploadRows, type PayrollLookups } from '@/services/payrollRowProcessor';
+import { fetchPayrollLookups, fetchUploadRows, makeFundingRangeFilter, type PayrollLookups } from '@/services/payrollRowProcessor';
 import { buildBackendLookups, type BackendLookups, type FeeConfigEntry, type FeeType as BackendFeeType } from './backendContributors';
 
 export interface OfficesPayload {
@@ -109,35 +109,6 @@ export interface TaggedRowRaw {
 
 export interface FundingRange { from: string | null; to: string | null }
 
-function parseFundingDateStr(v: any): Date | null {
-  if (!v) return null;
-  // All funding dates are interpreted in US Eastern time to keep results
-  // consistent regardless of the viewer's local timezone.
-  const toEastern = (y: number, mo: number, d: number, h = 0, mi = 0, s = 0) => {
-    // Eastern is UTC-5 (EST) or UTC-4 (EDT). Use a fixed -5h anchor then let
-    // JS compare as absolute instants; the daylight offset only shifts the
-    // boundary by 1h which is well inside a full-day filter window.
-    return new Date(Date.UTC(y, mo, d, h + 5, mi, s));
-  };
-  if (typeof v === 'number' && v > 20000 && v < 80000) {
-    return new Date(Date.UTC(1899, 11, 30) + v * 86400000);
-  }
-  const str = String(v);
-  if (/^\d+(\.\d+)?$/.test(str)) {
-    const n = parseFloat(str);
-    if (n > 20000 && n < 80000) return new Date(Date.UTC(1899, 11, 30) + n * 86400000);
-  }
-  const m = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
-  if (m) {
-    let y = parseInt(m[3], 10);
-    if (y < 100) y += 2000;
-    return toEastern(y, parseInt(m[1], 10) - 1, parseInt(m[2], 10));
-  }
-  const iso = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (iso) return toEastern(parseInt(iso[1], 10), parseInt(iso[2], 10) - 1, parseInt(iso[3], 10));
-  const d = new Date(str);
-  return isNaN(d.getTime()) ? null : d;
-}
 function getFieldLoose(raw: Record<string, any>, key: string): any {
   if (raw[key] !== undefined) return raw[key];
   for (const k of Object.keys(raw)) {
@@ -171,26 +142,13 @@ export function useUploadRows(selectedWeek: string | null | undefined, refreshTi
       }
       const batchResults = await Promise.all(batchPromises);
       const out: { upload_id: string; row_data: any; dataset: TaggedRowRaw['dataset'] }[] = [];
-      let lo: Date | undefined;
-      let hi: Date | undefined;
-      if (fundingRange && (fundingRange.from || fundingRange.to)) {
-        lo = fundingRange.from ? parseFundingDateStr(fundingRange.from) || undefined : undefined;
-        hi = fundingRange.to ? parseFundingDateStr(fundingRange.to) || undefined : undefined;
-        if (lo && hi && lo.getTime() > hi.getTime()) { const t = lo; lo = hi; hi = t; }
-        // Anchor day boundaries to Eastern time (start = 00:00 ET, end = 24:00 ET).
-        if (lo) lo = new Date(lo.getTime()); // already 00:00 ET
-        if (hi) hi = new Date(hi.getTime() + 86400000 - 1);
-      }
-      const rangeActive = !!(lo || hi);
+      const inRange = makeFundingRangeFilter(fundingRange?.from, fundingRange?.to);
       for (const arr of batchResults) {
         for (const r of arr) {
           const ds = uploadIdToDataset[r.upload_id];
           if (!ds) continue;
-          if (rangeActive && (ds === 'payroll' || ds === 'backend')) {
-            const fd = parseFundingDateStr(getFieldLoose(r.row_data || {}, 'Funding Date'));
-            if (!fd) continue;
-            if (lo && fd.getTime() < lo.getTime()) continue;
-            if (hi && fd.getTime() > hi.getTime()) continue;
+          if (inRange && (ds === 'payroll' || ds === 'backend')) {
+            if (!inRange(getFieldLoose(r.row_data || {}, 'Funding Date'))) continue;
           }
           out.push({ upload_id: r.upload_id, row_data: r.row_data, dataset: ds });
         }

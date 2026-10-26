@@ -6,7 +6,7 @@ import { cn, formatMoney as fmt } from '@/lib/utils';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
-import { fetchAllRows, fetchPayrollLookups, fundingMonthKey, preparerFee, processPayrollRow, type PayrollLookups } from '@/services/payrollRowProcessor';
+import { fetchAllRows, fetchPayrollLookups, fundingMonthKey, makeFundingRangeFilter, preparerFee, processPayrollRow, type PayrollLookups } from '@/services/payrollRowProcessor';
 import { toast } from 'sonner';
 import { officeMatches } from '@/services/types';
 import { getConsolidatedOffices } from '@/services/types';
@@ -51,31 +51,6 @@ function importLocalState(): Promise<void> {
     })();
   }
   return localImport;
-}
-
-// Same parser used by BackendFeeTable / SourceRowsPanel so date scoping is identical.
-function parseFundingDateStr(v: any): Date | null {
-  if (v === null || v === undefined || v === '') return null;
-  if (typeof v === 'number' && v > 20000 && v < 80000) {
-    return new Date(Date.UTC(1899, 11, 30) + v * 86400000);
-  }
-  const s = String(v);
-  if (/^\d+(\.\d+)?$/.test(s)) {
-    const n = parseFloat(s);
-    if (n > 20000 && n < 80000) {
-      return new Date(Date.UTC(1899, 11, 30) + n * 86400000);
-    }
-  }
-  const m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
-  if (m) {
-    let y = parseInt(m[3], 10);
-    if (y < 100) y += 2000;
-    return new Date(y, parseInt(m[1], 10) - 1, parseInt(m[2], 10));
-  }
-  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (iso) return new Date(parseInt(iso[1], 10), parseInt(iso[2], 10) - 1, parseInt(iso[3], 10));
-  const d = new Date(s);
-  return isNaN(d.getTime()) ? null : d;
 }
 
 
@@ -253,19 +228,9 @@ export function PreparersShareTable({ officeScope, onTotalChange, onExportData }
       // Apply Funding Date range filter so preparer share aligns with the
       // backend tiles / Source Rows panel (which scope by the same range).
       let filtered = all;
-      if (selectedWeekRange && (selectedWeekRange.from || selectedWeekRange.to)) {
-        let lo = selectedWeekRange.from ? parseFundingDateStr(selectedWeekRange.from) : null;
-        let hi = selectedWeekRange.to ? parseFundingDateStr(selectedWeekRange.to) : null;
-        if (lo && hi && lo.getTime() > hi.getTime()) { const t = lo; lo = hi; hi = t; }
-        if (lo) lo.setHours(0, 0, 0, 0);
-        if (hi) hi.setHours(23, 59, 59, 999);
-        filtered = all.filter(r => {
-          const fd = parseFundingDateStr(r['Funding Date'] ?? r['FUNDING_DATE'] ?? r['funding_date']);
-          if (!fd) return false;
-          if (lo && fd.getTime() < lo.getTime()) return false;
-          if (hi && fd.getTime() > hi.getTime()) return false;
-          return true;
-        });
+      const inRange = makeFundingRangeFilter(selectedWeekRange?.from, selectedWeekRange?.to);
+      if (inRange) {
+        filtered = all.filter(r => inRange(r['Funding Date'] ?? r['FUNDING_DATE'] ?? r['funding_date']));
       }
       if (!cancelled) { setLookups(lk); setRows(filtered); setLoading(false); }
     })().catch(err => {
