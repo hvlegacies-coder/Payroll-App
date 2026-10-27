@@ -139,6 +139,32 @@ export async function runIntegrityChecks(): Promise<AuditResult[]> {
     });
   }
 
+  // Check 5: every active preparer's Tax Office is an existing office. A
+  // mismatch (e.g. "Instant Tax" vs "Instant") silently drops the preparer's
+  // rows from office fee tiles and pays them at 100% instead of the office's share.
+  const officeName = "Every active preparer's Tax Office is an existing office";
+  try {
+    const [offices, preparers] = await Promise.all([
+      supabase.from("offices").select("office_name").eq("active", true),
+      supabase.from("preparers").select("contractor, ptin, tax_office").eq("active", true),
+    ]);
+    if (offices.error) throw offices.error;
+    if (preparers.error) throw preparers.error;
+    const known = new Set((offices.data || []).map((o: any) => o.office_name));
+    const bad = (preparers.data || []).filter((p: any) => !known.has(p.tax_office));
+    out.push({
+      name: officeName,
+      status: bad.length === 0 ? "pass" : "fail",
+      expected: "0 preparers with an unknown office",
+      actual: `${bad.length} preparer(s) with an unknown office`,
+      detail: bad.length
+        ? bad.map((p: any) => `${p.contractor} (${p.ptin}): "${p.tax_office || ""}"`).join("\n")
+        : undefined,
+    });
+  } catch (e) {
+    out.push(failed(officeName, e));
+  }
+
   return out;
 }
 
