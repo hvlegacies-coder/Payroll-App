@@ -7,45 +7,16 @@ import { Loader2 } from 'lucide-react';
 import { cn, formatMoney as fmt } from '@/lib/utils';
 import { SourceTotalBadge } from './SourceTotalBadge';
 
-type FeeType = 'E-File Fee(s)' | 'E-File Downlines' | 'Service Bureau Fee' | 'ERO3Fee' | 'Transmitter Fee' | 'E-File-EFIN' | 'ERO3-EFIN';
-
-const FEE_TYPES: FeeType[] = ['E-File Fee(s)', 'E-File Downlines', 'Service Bureau Fee', 'ERO3Fee', 'Transmitter Fee', 'E-File-EFIN', 'ERO3-EFIN'];
-
-// Underlying field source for each tile (E-File-EFIN reuses the E-File field but filters by EFIN)
-const FEE_FIELD_KEY: Record<FeeType, string> = {
-  'E-File Fee(s)': 'E-File Fee(s)',
-  'E-File Downlines': 'E-File Fee(s)',
-  'Service Bureau Fee': 'Service Bureau Fee',
-  'ERO3Fee': 'ERO3Fee',
-  'Transmitter Fee': 'Transmitter Fee',
-  'E-File-EFIN': 'E-File Fee(s)',
-  'ERO3-EFIN': 'ERO3Fee',
-};
-
-// Which fee config a tile uses for routing (E-File-EFIN routes via E-File config)
-const FEE_CONFIG_KEY: Record<FeeType, Exclude<FeeType, 'E-File-EFIN' | 'ERO3-EFIN' | 'E-File Downlines'>> = {
-  'E-File Fee(s)': 'E-File Fee(s)',
-  'E-File Downlines': 'E-File Fee(s)',
-  'Service Bureau Fee': 'Service Bureau Fee',
-  'ERO3Fee': 'ERO3Fee',
-  'Transmitter Fee': 'Transmitter Fee',
-  'E-File-EFIN': 'E-File Fee(s)',
-  'ERO3-EFIN': 'ERO3Fee',
-};
-
-// Office scopes that should see the special EFIN-filtered tile, mapped to the EFIN to filter on
-const EFIN_TILE_BY_OFFICE: Record<string, string> = {
-  'D & D': '381268',
-  'PowerPlay': '381623',
-  'S & C': '381871',
-  'King J': '741288',
-};
-
-// Fallback EFIN used by the EFIN-filtered tiles when the primary EFIN has zero
-// matching backend rows. Mirrors fieldRegistry.EFIN_VIRTUAL_FIELDS.fallbackEfin.
-const EFIN_TILE_FALLBACK_BY_OFFICE: Record<string, string> = {
-  'D & D': '387641',
-};
+// Fee rules, office resolution and fee splitting all come from backendContributors,
+// the same module Source Rows and the summary tables use, so the tiles always agree.
+import {
+  type FeeType, type FeeConfigEntry, FEE_TYPES, FEE_FIELD_KEY, FEE_CONFIG_KEY,
+  EFIN_TILE_BY_OFFICE, EFIN_TILE_FALLBACK_BY_OFFICE, TRANSMITTER_FEE_WHITELIST_HIGHER_VIEW,
+  SERVICE_BUREAU_FEE_HIGHER_VIEW_FULL_OFFICES, SERVICE_BUREAU_FEE_HIGHER_VIEW_SPLIT_OFFICES,
+  SERVICE_BUREAU_FEE_HIGHER_VIEW_SPLIT_RATE, SERVICE_BUREAU_FEE_D_AND_D_WHITELIST,
+  SERVICE_BUREAU_FEE_POWERPLAY_WHITELIST, EFILE_FEE_D_AND_D_WHITELIST, EFILE_DOWNLINES_D_AND_D_WHITELIST,
+  normalizeOfficeName, getFieldValue, distributeFee, buildBackendLookups, resolveTaxOffice, buildRollupOffices,
+} from './backendContributors';
 
 const HEADER_COLOR: Record<FeeType, string> = {
   'Transmitter Fee': 'hsl(0 0% 80%)',
@@ -57,152 +28,12 @@ const HEADER_COLOR: Record<FeeType, string> = {
   'ERO3-EFIN': 'hsl(330 60% 80%)',
 };
 
-// Service Bureau offices under Higher View — only these contribute to the
-// Transmitter Fee tile when the Higher View office summary is being viewed.
-const TRANSMITTER_FEE_WHITELIST_HIGHER_VIEW = new Set([
-  'Higher View','PowerPlay','D & D','King J','KingJ','Main Event','S & C',
-  'BC','Dior','DJN','Instant','Kenrel','LBN','Step-by-Step','VEO','Go Up Financials',
-]);
-
-// Service Bureau Fee under Higher View is a fixed backend-source rollup.
-// Split offices send $59.05 per row elsewhere; Higher View receives the remainder.
-const SERVICE_BUREAU_FEE_HIGHER_VIEW_FULL_OFFICES = new Set([
-  'Higher View','King J','KingJ','Main Event','Boss Ladi','S & C','GG Services','Tax Nook',
-]);
-const SERVICE_BUREAU_FEE_HIGHER_VIEW_SPLIT_OFFICES = new Set([
-  'BC','Dior','DJN','Instant','Kenrel','LBN','Step-by-Step','VEO',
-]);
-const SERVICE_BUREAU_FEE_HIGHER_VIEW_SPLIT_RATE = 59.05;
-
-// Hard PTIN→office overrides. Wins over EFIN/parent inference.
-const PTIN_OFFICE_OVERRIDES: Record<string, string> = {
-  'p03251494': 'Kenrel',
-};
-
-// Service Bureau Fee offices that should appear in the D&D office summary.
-const SERVICE_BUREAU_FEE_D_AND_D_WHITELIST = new Set([
-  'Bright Meadow',
-  'D & D',
-  'Malone Method Tax Services',
-  'Premier Tax Software',
-  'Prolific Legacy',
-  'Clarity Tax Group',
-  "S&D Tax Solutions",
-  "R'Moni",
-  'Savvy Tax Pros',
-  'SmartFile',
-  'Stellar Tax Co',
-  'Tygermatic Taxes',
-  'Pink Connection',
-  'Big Payback',
-  'Tax Champions',
-  'Go Up Financials',
-]);
-
-// Service Bureau Fee offices that should appear in the PowerPlay office summary.
-const SERVICE_BUREAU_FEE_POWERPLAY_WHITELIST = new Set([
-  'GMoad Taxes',
-  'JMJ',
-  'LNC',
-  'PowerPlay',
-  'Divine Dynasty',
-  'Brilliant Minds',
-  'Dukes and Co.',
-  'Fast Cash Tax Service',
-  'Klarity Tax',
-  'Precise Taxes',
-  'Tax Vault Solutions LLC',
-  'The Tax Doc LLC',
-]);
-
-// E-File Fee tile under D&D — only these offices contribute (subset of the
-// service-bureau whitelist; the four downline offices below are split into
-// the dedicated "E-File Downlines" tile instead).
-const EFILE_FEE_D_AND_D_WHITELIST = new Set([
-  'D & D',
-  'Malone Method Tax Services',
-  'Premier Tax Software',
-  'Clarity Tax Group',
-  'S&D Tax Solutions',
-  "R'Moni",
-  'Savvy Tax Pros',
-  'SmartFile',
-  'Tygermatic Taxes',
-  'Pink Connection',
-  'Big Payback',
-  'Go Up Financials',
-]);
-
-// E-File Downlines tile under D&D — raw sum from these four downline offices.
-const EFILE_DOWNLINES_D_AND_D_WHITELIST = new Set([
-  'Bright Meadow',
-  'Prolific Legacy',
-  'Stellar Tax Co',
-  'Tax Champions',
-]);
-
-// Normalize office names for loose comparison (e.g. "D & D" === "D&D").
-const normalizeOfficeName = (s: string) => s.replace(/\s+/g, '').toLowerCase();
-
-interface FeeConfigEntry {
-  target_office: string;
-  mode: 'percentage' | 'flat_rate' | 'remaining';
-  value: number;
-}
-
 interface Props {
   officeScope: string; // current office viewing the summary
   onTotalsChange?: (totals: Record<FeeType, number>) => void;
   hiddenFeeTypes?: string[];
   onHideFee?: (feeType: string) => void;
   onExportData?: (tiles: { feeType: string; rows: { office: string; amount: number }[]; total: number }[]) => void;
-}
-
-function parseNum(v: any): number {
-  if (v === null || v === undefined || v === '') return 0;
-  if (typeof v === 'number') return v;
-  return Number(String(v).replace(/[$,]/g, '')) || 0;
-}
-
-function getFieldValue(row: Record<string, any>, key: string): number {
-  if (row[key] !== undefined) return parseNum(row[key]);
-  const norm = key.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-  for (const k of Object.keys(row)) {
-    if (k.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() === norm) return parseNum(row[k]);
-  }
-  return 0;
-}
-
-/** Distribute a single fee amount across target offices. */
-function distributeFee(amount: number, entries: FeeConfigEntry[]): Record<string, number> {
-  const result: Record<string, number> = {};
-  if (!entries || entries.length === 0 || amount <= 0) return result;
-
-  let remaining = amount;
-  const remainingEntries: FeeConfigEntry[] = [];
-
-  for (const e of entries) {
-    if (e.mode === 'percentage') {
-      const v = (amount * e.value) / 100;
-      result[e.target_office] = (result[e.target_office] || 0) + v;
-      remaining -= v;
-    } else if (e.mode === 'flat_rate') {
-      const v = Math.min(e.value, remaining);
-      result[e.target_office] = (result[e.target_office] || 0) + v;
-      remaining -= v;
-    } else {
-      remainingEntries.push(e);
-    }
-  }
-
-  if (remainingEntries.length > 0 && remaining > 0) {
-    const each = remaining / remainingEntries.length;
-    for (const e of remainingEntries) {
-      result[e.target_office] = (result[e.target_office] || 0) + each;
-    }
-  }
-
-  return result;
 }
 
 export function BackendFeeTable({ officeScope, onTotalsChange, hiddenFeeTypes = [], onHideFee, onExportData }: Props) {
@@ -286,63 +117,8 @@ export function BackendFeeTable({ officeScope, onTotalsChange, hiddenFeeTypes = 
         });
       }
 
-      // Build PTIN/EFIN -> office lookups
-      const ptinToOffices: Record<string, string[]> = {};
-      if (preparersData) {
-        for (const p of preparersData) {
-          if (p.ptin && p.tax_office) {
-            const k = p.ptin.trim().toLowerCase();
-            if (!ptinToOffices[k]) ptinToOffices[k] = [];
-            if (!ptinToOffices[k].includes(p.tax_office)) ptinToOffices[k].push(p.tax_office);
-          }
-        }
-      }
-      const efinToOffices: Record<string, string[]> = {};
-      const officeParent: Record<string, string> = {};
-      if (offices) {
-        for (const o of offices) {
-          if (o.parent_office) officeParent[o.office_name] = o.parent_office;
-          for (const efin of [o.primary_efin, o.secondary_efin]) {
-            if (efin) {
-              if (!efinToOffices[efin]) efinToOffices[efin] = [];
-              if (!efinToOffices[efin].includes(o.office_name)) efinToOffices[efin].push(o.office_name);
-            }
-          }
-        }
-      }
-
-      const resolveTaxOffice = (efin: string, ptin: string): string => {
-        const ptinKey = ptin.trim().toLowerCase();
-        const override = PTIN_OFFICE_OVERRIDES[ptinKey];
-        if (override) return override;
-        const preparerOffices = ptinToOffices[ptinKey];
-        if (preparerOffices && preparerOffices.length === 1) return preparerOffices[0];
-        if (preparerOffices && preparerOffices.length > 1) {
-          const efinCands = efinToOffices[efin] || [];
-          // If one candidate's parent_office is another candidate AND the
-          // child's EFIN matches the row EFIN, prefer the deeper child
-          // (e.g. Kenrel/King J shared PTIN with Kenrel's EFIN → Kenrel).
-          const childOfAnother = preparerOffices.find(po => {
-            const parent = officeParent[po];
-            return parent
-              && preparerOffices.some(other => normalizeOfficeName(other) === normalizeOfficeName(parent))
-              && efinCands.includes(po);
-          });
-          if (childOfAnother) return childOfAnother;
-          for (const po of preparerOffices) {
-            if (efinCands.includes(po) && officeParent[po]) return po;
-          }
-          for (const po of preparerOffices) {
-            if (efinCands.includes(po)) return po;
-          }
-          return preparerOffices[0];
-        }
-        const efinCands = efinToOffices[efin] || [];
-        if (efinCands.length === 0) return '';
-        if (efinCands.length === 1) return efinCands[0];
-        for (const c of efinCands) if (officeParent[c]) return c;
-        return efinCands[0];
-      };
+      const lookups = buildBackendLookups(offices || [], preparersData || []);
+      const officeParent = lookups.officeParent;
 
       // Group rows by source (Tax Office)
       const grouped: Record<string, Record<string, any>[]> = {};
@@ -350,7 +126,7 @@ export function BackendFeeTable({ officeScope, onTotalsChange, hiddenFeeTypes = 
         const data = (typeof r.row_data === 'object' && r.row_data) ? r.row_data as Record<string, any> : {};
         const efin = String(data['EFIN'] ?? '').trim();
         const ptin = String(data['PTIN'] ?? '').trim();
-        const src = resolveTaxOffice(efin, ptin);
+        const src = resolveTaxOffice(efin, ptin, lookups);
         if (!src) continue;
         if (!grouped[src]) grouped[src] = [];
         grouped[src].push(data);
@@ -381,11 +157,7 @@ export function BackendFeeTable({ officeScope, onTotalsChange, hiddenFeeTypes = 
     // Build the set of source offices that "roll up" to officeScope (the scope
     // itself plus any office whose parent_office matches it, normalized).
     const scopeNorm = normalizeOfficeName(officeScope);
-    const rollupOffices = new Set<string>();
-    rollupOffices.add(officeScope);
-    for (const [child, parent] of Object.entries(officeParents)) {
-      if (normalizeOfficeName(parent) === scopeNorm) rollupOffices.add(child);
-    }
+    const rollupOffices = buildRollupOffices(officeScope, officeParents);
     for (const fee of FEE_TYPES) {
       const isEfinTile = fee === 'E-File-EFIN' || fee === 'ERO3-EFIN';
       // Skip the EFIN-filtered tiles entirely for offices that don't use them

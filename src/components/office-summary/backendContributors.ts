@@ -49,6 +49,7 @@ export const EFIN_TILE_BY_OFFICE: Record<string, string> = {
   'D & D': '381268',
   'PowerPlay': '381623',
   'S & C': '381871',
+  'King J': '741288',
 };
 
 export const EFIN_TILE_FALLBACK_BY_OFFICE: Record<string, string> = {
