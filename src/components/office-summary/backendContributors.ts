@@ -113,7 +113,7 @@ export interface FeeConfigEntry {
 }
 
 // Shared safe-numeric coercion. See src/lib/num.ts.
-import { toNum } from '@/lib/num';
+import { toNum } from '../../lib/num';
 export const parseNum = toNum;
 
 export function getFieldValue(row: Record<string, any>, key: string): number {

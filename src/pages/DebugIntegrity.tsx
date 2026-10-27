@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { useActiveWeek } from "@/hooks/useActiveWeek";
 import { useAlignment } from "@/contexts/AlignmentContext";
 import { runAppAudit, type AuditResult } from "@/services/appAudit";
+import { askAssistant } from "@/lib/askAssistant";
 
 /**
  * Admin-only App Health page. Mounted at /debug/integrity behind
@@ -63,18 +64,10 @@ export default function DebugIntegrity() {
       .map((p) => `- ${p.name}: ${p.actual}${p.detail ? `\n  ${p.detail.split("\n").slice(0, 5).join("\n  ")}` : ""}`)
       .join("\n");
     try {
-      const res = await fetch("/api/ai-assistant", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: [{
-            role: "user",
-            content: `The app's automatic audit for week ${selectedWeek ?? "(none)"} found these problems. For each, explain in plain English what it means, how serious it is, and exactly where in the app to fix it.\n\n${list}`,
-          }],
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      setExplanation(res.ok ? data?.reply || "No response." : `AI error: ${data?.error ?? res.status}`);
+      setExplanation(await askAssistant([{
+        role: "user",
+        content: `The app's automatic audit for week ${selectedWeek ?? "(none)"} found these problems. For each, explain in plain English what it means, how serious it is, and exactly where in the app to fix it.\n\n${list}`,
+      }]));
     } catch (e: any) {
       setExplanation(`AI error: ${e?.message ?? "request failed"}`);
     }

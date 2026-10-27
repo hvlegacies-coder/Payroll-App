@@ -4,6 +4,7 @@ import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { askAssistant } from '@/lib/askAssistant';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -176,17 +177,7 @@ export function AIAssistant() {
     setStatus('thinking');
 
     try {
-      const res = await fetch('/api/ai-assistant', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: newMessages }),
-      });
-
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(data?.error ? `${data.error}${data.detail ? `: ${String(data.detail).slice(0, 300)}` : ''}` : `Assistant error ${res.status}`);
-      }
-      const reply: string = data?.reply || "Sorry, I couldn't get a response.";
+      const reply = await askAssistant(newMessages);
       const updated: Message[] = [...newMessages, { role: 'assistant', content: reply }];
       setMessages(updated);
 
