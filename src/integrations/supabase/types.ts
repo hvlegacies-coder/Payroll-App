@@ -577,6 +577,8 @@ export type Database = {
           funding_date_to: string | null
           id: string
           is_active: boolean
+          no_payroll: boolean
+          no_payroll_note: string | null
           label: string
           start_date: string
         }
@@ -587,6 +589,8 @@ export type Database = {
           funding_date_to?: string | null
           id?: string
           is_active?: boolean
+          no_payroll?: boolean
+          no_payroll_note?: string | null
           label: string
           start_date: string
         }
@@ -597,6 +601,8 @@ export type Database = {
           funding_date_to?: string | null
           id?: string
           is_active?: boolean
+          no_payroll?: boolean
+          no_payroll_note?: string | null
           label?: string
           start_date?: string
         }

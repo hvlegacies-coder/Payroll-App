@@ -8,6 +8,8 @@ export interface PayrollWeek {
   is_active: boolean;
   funding_date_from?: string | null;
   funding_date_to?: string | null;
+  no_payroll?: boolean;
+  no_payroll_note?: string | null;
 }
 
 interface ActiveWeekContextValue {

@@ -4,7 +4,9 @@ import { StatusBadge } from '@/components/payroll/StatusBadge';
 import { FilterBar } from '@/components/payroll/FilterBar';
 import { DataTable, Column } from '@/components/payroll/DataTable';
 import { Button } from '@/components/ui/button';
-import { Upload, FileText, DollarSign, Users, Mail, Shield, CheckCircle2, AlertTriangle, XCircle, Loader2, Trash2, ShieldCheck, Download } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { Input } from '@/components/ui/input';
+import { Upload, FileText, DollarSign, Users, Mail, Shield, CheckCircle2, AlertTriangle, XCircle, Loader2, Trash2, ShieldCheck, Download, CalendarOff } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { parseFile, validateHeaders, getExpectedHeaders, buildUploadWorkbook, normalizeHeader, type ParsedFile } from '@/services/fileParser';
@@ -70,7 +72,7 @@ interface UploadRecord {
 }
 
 export default function UploadCenter() {
-  const { selectedWeek, activeWeek } = useActiveWeek();
+  const { selectedWeek, activeWeek, weeks, refresh: refreshWeeks } = useActiveWeek();
   const [search, setSearch] = useState('');
   const [uploadHistory, setUploadHistory] = useState<UploadRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -127,6 +129,18 @@ export default function UploadCenter() {
   useEffect(() => {
     loadUploads();
   }, [loadUploads]);
+
+  // "No payroll this week" flag, saved on the week so every admin sees it.
+  const weekRow = weeks.find(w => w.label === selectedWeek);
+  const noPayroll = !!weekRow?.no_payroll;
+  const [noPayrollNote, setNoPayrollNote] = useState('');
+  useEffect(() => { setNoPayrollNote(weekRow?.no_payroll_note || ''); }, [weekRow?.id, weekRow?.no_payroll_note]);
+  const saveNoPayroll = async (patch: { no_payroll?: boolean; no_payroll_note?: string | null }) => {
+    if (!weekRow) return;
+    const { error } = await supabase.from('payroll_weeks').update(patch).eq('id', weekRow.id);
+    if (error) { toast.error(`Could not save: ${error.message}`); return; }
+    await refreshWeeks();
+  };
 
   const filtered = uploadHistory.filter(u => u.filename.toLowerCase().includes(search.toLowerCase()) || u.type.toLowerCase().includes(search.toLowerCase()));
 
@@ -421,7 +435,31 @@ export default function UploadCenter() {
             </div>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+          {weekRow && (
+            <div className={`mb-4 rounded-xl border p-4 ${noPayroll ? 'bg-amber-50 border-amber-300 dark:bg-amber-950/30 dark:border-amber-800' : 'bg-card border-border'}`}>
+              <div className="flex items-center gap-3">
+                <CalendarOff className={`h-5 w-5 shrink-0 ${noPayroll ? 'text-amber-600' : 'text-muted-foreground'}`} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium">{noPayroll ? `No payroll for ${selectedWeek}` : 'No payroll this week?'}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {noPayroll ? 'Marked as having no payroll — no reports need to be uploaded for this week.' : 'Turn on if there are no reports to upload for this week.'}
+                  </p>
+                </div>
+                <Switch checked={noPayroll} onCheckedChange={(v) => saveNoPayroll({ no_payroll: v })} aria-label="No payroll this week" />
+              </div>
+              {noPayroll && (
+                <Input
+                  className="mt-3 text-sm"
+                  placeholder="Note (optional), e.g. Holiday week — no funding"
+                  value={noPayrollNote}
+                  onChange={(e) => setNoPayrollNote(e.target.value)}
+                  onBlur={() => { if (noPayrollNote !== (weekRow.no_payroll_note || '')) saveNoPayroll({ no_payroll_note: noPayrollNote || null }); }}
+                />
+              )}
+            </div>
+          )}
+
+          <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8 ${noPayroll ? 'opacity-50' : ''}`}>
             {uploadTypes.map((type) => (
               <div key={type.label} className="bg-card rounded-xl border border-border p-5 shadow-card hover:shadow-elevated transition-shadow">
                 <div className="flex items-start gap-3">
