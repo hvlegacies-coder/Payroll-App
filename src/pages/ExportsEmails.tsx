@@ -12,6 +12,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useActiveWeek } from '@/hooks/useActiveWeek';
 
 type AppMessage = {
   id: string;
@@ -31,6 +33,31 @@ type AppMessage = {
 
 const SENDER_FROM = 'payroll@notify.higherviewtaxesllc.com';
 
+// Ready-made messages tied to a payroll week. Picking one fills Subject and
+// Message, which can still be edited before sending.
+const TEMPLATES: Record<string, { label: string; build: (week: string, note?: string | null) => { subject: string; body: string } }> = {
+  'no-payroll': {
+    label: 'No payroll this week',
+    build: (week, note) => ({
+      subject: `No Payroll This Week — ${week}`,
+      body: [
+        'Hi,',
+        '',
+        `There is no payroll for the payroll week ${week}. No payments will be issued for this week.`,
+        ...(note ? ['', `Note: ${note}`] : []),
+        '',
+        'Payroll will resume with the next scheduled payroll week. If you have any questions, just reply to this email.',
+        '',
+        'Thank you,',
+        'Higher View Taxes Payroll',
+      ].join('\n'),
+    }),
+  },
+};
+
+// "a@x.com, b@y.com; c@z.com" (or one per line) -> unique addresses.
+const parseRecipients = (s: string) => [...new Set(s.split(/[\s,;]+/).map(e => e.trim()).filter(Boolean))];
+
 export default function ExportsEmails() {
   const location = useLocation();
   const initialTab: 'Inbox' | 'Sent' = location.pathname.startsWith('/inbox') ? 'Inbox' : 'Sent';
@@ -48,6 +75,20 @@ export default function ExportsEmails() {
   const [file, setFile] = useState<File | null>(null);
   const [sending, setSending] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const { weeks, selectedWeek } = useActiveWeek();
+  const [templateKey, setTemplateKey] = useState('');
+  const [templateWeek, setTemplateWeek] = useState('');
+
+  const applyTemplate = (key: string, weekLabel: string) => {
+    setTemplateKey(key);
+    setTemplateWeek(weekLabel);
+    const t = TEMPLATES[key];
+    if (!t || !weekLabel) return;
+    const w = weeks.find(x => x.label === weekLabel);
+    const filled = t.build(weekLabel, w?.no_payroll_note);
+    setSubject(filled.subject);
+    setBody(filled.body);
+  };
 
   const load = async () => {
     const { data, error } = await supabase
@@ -98,14 +139,15 @@ export default function ExportsEmails() {
   }, [messages]);
 
   const resetCompose = () => {
-    setTo(''); setSubject(''); setBody(''); setFile(null);
+    setTo(''); setSubject(''); setBody(''); setFile(null); setTemplateKey(''); setTemplateWeek('');
     if (fileRef.current) fileRef.current.value = '';
   };
 
   const handleSend = async () => {
-    const recipient = to.trim();
-    if (!recipient || !/^\S+@\S+\.\S+$/.test(recipient)) {
-      toast.error('Enter a valid recipient email');
+    const recipients = parseRecipients(to);
+    const invalid = recipients.filter(r => !/^\S+@\S+\.\S+$/.test(r));
+    if (recipients.length === 0 || invalid.length > 0) {
+      toast.error(invalid.length ? `Invalid email: ${invalid.join(', ')}` : 'Enter a valid recipient email');
       return;
     }
     if (!subject.trim() && !body.trim()) {
@@ -127,41 +169,50 @@ export default function ExportsEmails() {
         attachmentName = file.name;
       }
 
-      const id = crypto.randomUUID();
+      // One message per recipient so each shows (and can fail) on its own in Sent.
+      const failed: string[] = [];
+      for (const recipient of recipients) {
+        const id = crypto.randomUUID();
 
-      const { error: insertErr } = await supabase.from('app_messages').insert({
-        id,
-        direction: 'outbound',
-        from_email: SENDER_FROM,
-        to_email: recipient,
-        subject: subject.trim(),
-        body: body,
-        attachment_url: attachmentUrl,
-        attachment_name: attachmentName,
-        status: 'pending',
-      });
-      if (insertErr) throw insertErr;
+        const { error: insertErr } = await supabase.from('app_messages').insert({
+          id,
+          direction: 'outbound',
+          from_email: SENDER_FROM,
+          to_email: recipient,
+          subject: subject.trim(),
+          body: body,
+          attachment_url: attachmentUrl,
+          attachment_name: attachmentName,
+          status: 'pending',
+        });
+        if (insertErr) throw insertErr;
 
-      const { error: fnErr } = await supabase.functions.invoke('send-transactional-email', {
-        body: {
-          templateName: 'app-message',
-          recipientEmail: recipient,
-          idempotencyKey: `app-message-${id}`,
-          templateData: {
-            subject: subject.trim(),
-            body,
-            attachmentUrl,
-            attachmentName,
+        const { error: fnErr } = await supabase.functions.invoke('send-transactional-email', {
+          body: {
+            templateName: 'app-message',
+            recipientEmail: recipient,
+            idempotencyKey: `app-message-${id}`,
+            templateData: {
+              subject: subject.trim(),
+              body,
+              attachmentUrl,
+              attachmentName,
+            },
           },
-        },
-      });
+        });
 
-      if (fnErr) {
-        await supabase.from('app_messages').update({ status: 'failed', error: fnErr.message }).eq('id', id);
-        toast.error(`Send failed: ${fnErr.message}`);
+        if (fnErr) {
+          await supabase.from('app_messages').update({ status: 'failed', error: fnErr.message }).eq('id', id);
+          failed.push(recipient);
+        } else {
+          await supabase.from('app_messages').update({ status: 'sent' }).eq('id', id);
+        }
+      }
+
+      if (failed.length > 0) {
+        toast.error(`Send failed for ${failed.length} of ${recipients.length}: ${failed.join(', ')}`);
       } else {
-        await supabase.from('app_messages').update({ status: 'sent' }).eq('id', id);
-        toast.success('Email sent');
+        toast.success(recipients.length > 1 ? `Email sent to ${recipients.length} recipients` : 'Email sent');
         setComposeOpen(false);
         resetCompose();
       }
@@ -247,9 +298,32 @@ export default function ExportsEmails() {
         <DialogContent className="max-w-lg">
           <DialogHeader><DialogTitle>New Email</DialogTitle></DialogHeader>
           <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Template</label>
+                <Select value={templateKey} onValueChange={(k) => applyTemplate(k, templateWeek || selectedWeek)}>
+                  <SelectTrigger className="mt-1"><SelectValue placeholder="None" /></SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(TEMPLATES).map(([k, t]) => <SelectItem key={k} value={k}>{t.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Payroll week</label>
+                <Select value={templateWeek} onValueChange={(w) => applyTemplate(templateKey, w)} disabled={!templateKey}>
+                  <SelectTrigger className="mt-1"><SelectValue placeholder="Select week" /></SelectTrigger>
+                  <SelectContent>
+                    {weeks.map(w => (
+                      <SelectItem key={w.id} value={w.label}>{w.label}{w.no_payroll ? ' — no payroll' : ''}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
             <div>
               <label className="text-xs font-medium text-muted-foreground">To</label>
-              <Input value={to} onChange={(e) => setTo(e.target.value)} placeholder="recipient@example.com" className="mt-1" />
+              <Textarea value={to} onChange={(e) => setTo(e.target.value)} placeholder="recipient@example.com — separate several with commas or new lines" className="mt-1" rows={2} />
+              {parseRecipients(to).length > 1 && <p className="text-[11px] text-muted-foreground mt-1">{parseRecipients(to).length} recipients — each gets their own email.</p>}
             </div>
             <div>
               <label className="text-xs font-medium text-muted-foreground">Subject</label>
