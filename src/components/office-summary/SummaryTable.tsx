@@ -236,17 +236,10 @@ export function SummaryTable({ config, onChange, onDelete, officeScope, siblingT
       return !!ptin && scopePtinSet.has(ptin);
     }
     if (row.dataset === 'fee_intercept') {
-      // Fee Intercept rows are scoped strictly by the head office's own
-      // EFINs (primary + secondary). Downline/consolidated offices are
-      // intentionally excluded so totals don't double-count.
-      const candidates = [
-        row.data?.['EFIN'],
-        row.data?.['Parent EFIN'],
-        row.data?.['PARENT_EFIN'],
-        row.data?.['Group EFIN'],
-        row.data?.['GROUP_EFIN'],
-      ].map((v) => String(v || '').trim()).filter(Boolean);
-      return candidates.some((e) => headOfficeEfinSet.has(e));
+      // Fee Intercept rows are scoped strictly by the row's EFIN column
+      // against the head office's own EFINs (primary + secondary). No
+      // downline or Parent/Group EFIN matching, so totals don't double-count.
+      return headOfficeEfinSet.has(String(row.data?.['EFIN'] || '').trim());
     }
     if (matchesScope(row.resolvedTaxOffice)) return true;
     const efin = String(row.data?.['EFIN'] || '').trim();

@@ -146,7 +146,6 @@ export function SourceRowsPanel({ officeScope, onExportData }: Props) {
   const [scopeEfins, setScopeEfins] = useState<Set<string>>(new Set());
   const [consolidatedOfficeNames, setConsolidatedOfficeNames] = useState<Set<string>>(new Set());
   const [headEfins, setHeadEfins] = useState<Set<string>>(new Set());
-  const [descendantEfins, setDescendantEfins] = useState<Set<string>>(new Set());
   const [efinIncludedOffices, setEfinIncludedOffices] = useState<string[]>([]);
   const [lookups, setLookups] = useState<PayrollLookups | null>(null);
   const [backendLookups, setBackendLookups] = useState<BackendLookups | null>(null);
@@ -161,7 +160,6 @@ export function SourceRowsPanel({ officeScope, onExportData }: Props) {
       setScopeEfins(new Set());
       setConsolidatedOfficeNames(new Set());
       setHeadEfins(new Set());
-      setDescendantEfins(new Set());
       return;
     }
     (async () => {
@@ -212,23 +210,6 @@ export function SourceRowsPanel({ officeScope, onExportData }: Props) {
         if (rawParent && norm(String(rawParent)) === norm(officeScope)) return true;
         return false;
       };
-      // Fee Intercept rows only carry EFIN/Parent EFIN/Group EFIN, no PTIN —
-      // so a genuine downline with its own distinct EFIN (e.g. King J → LBN)
-      // needs its EFIN(s) pulled in via the parent_office chain, not just an
-      // exact EFIN match against the head office. D&D intentionally excludes
-      // sub-offices everywhere else in this file, so keep that carve-out here.
-      const isDD = normalizeOfficeName(officeScope) === normalizeOfficeName('D & D');
-      const dEfins = new Set<string>();
-      if (!isDD) {
-        Object.keys(efinMap).forEach((o) => {
-          if (o === officeScope) return;
-          if (!isDescendant(o)) return;
-          for (const e of [efinMap[o], efinMap2[o]]) {
-            if (e) dEfins.add(e);
-          }
-        });
-      }
-      setDescendantEfins(dEfins);
       const offices = new Set<string>(getConsolidatedOffices(officeScope));
       // Scope EFIN: single effective EFIN for the head office.
       // Rule: secondary_efin if present, else primary_efin.
@@ -419,24 +400,11 @@ export function SourceRowsPanel({ officeScope, onExportData }: Props) {
       return out;
     }
     if (key === 'fee_intercept') {
-      // Consolidate by the head office's own EFINs plus any descendant
-      // offices' EFINs (e.g. King J -> LBN) — a downline with its own
-      // distinct EFIN still belongs here, matched via parent_office rather
-      // than requiring its EFIN to equal the head's.
-      const feeInterceptEfins = new Set<string>([...headEfins, ...descendantEfins]);
-      if (!officeScope || feeInterceptEfins.size === 0) return [];
-      const out: Record<string, any>[] = [];
-      for (const r of allRows) {
-        const candidates = [
-          getVal(r, 'EFIN'),
-          getVal(r, 'Parent EFIN'),
-          getVal(r, 'PARENT_EFIN'),
-          getVal(r, 'Group EFIN'),
-          getVal(r, 'GROUP_EFIN'),
-        ].map(v => String(v || '').trim()).filter(Boolean);
-        if (candidates.some(e => feeInterceptEfins.has(e))) out.push(r);
-      }
-      return out;
+      // Strict: a row belongs to this office only if its EFIN column is one
+      // of the office's own EFINs (primary/secondary/extra). No downline
+      // EFINs and no Parent/Group EFIN matching.
+      if (!officeScope || headEfins.size === 0) return [];
+      return allRows.filter(r => headEfins.has(String(getVal(r, 'EFIN') || '').trim()));
     }
     // Backend tab: filter to the exact rows that feed the Backend Money tiles
     // for this office scope, so totals match tile-for-tile.
@@ -469,13 +437,13 @@ export function SourceRowsPanel({ officeScope, onExportData }: Props) {
 
   const scopedRows = useMemo(() => scopeForTab(tab),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [rowsByTab, scopeEfins, headEfins, descendantEfins, officeScope, tab, lookups, backendLookups, configsBySource, selectedWeekRange]);
+    [rowsByTab, scopeEfins, headEfins, officeScope, tab, lookups, backendLookups, configsBySource, selectedWeekRange]);
 
   const scopedRowsOther = useMemo(() => {
     const others: TabKey[] = (['payroll', 'backend', 'fee_intercept'] as TabKey[]).filter(k => k !== tab);
     return others.map(key => ({ key, rows: scopeForTab(key) }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rowsByTab, scopeEfins, headEfins, descendantEfins, officeScope, tab, lookups, backendLookups, configsBySource, selectedWeekRange]);
+  }, [rowsByTab, scopeEfins, headEfins, officeScope, tab, lookups, backendLookups, configsBySource, selectedWeekRange]);
 
   const filteredRows = useMemo(() => {
     const s = search.trim().toLowerCase();
