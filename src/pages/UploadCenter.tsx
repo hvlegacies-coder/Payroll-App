@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Upload, FileText, DollarSign, Users, Mail, Shield, CheckCircle2, AlertTriangle, XCircle, Loader2, Trash2, ShieldCheck, Download } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { parseFile, validateHeaders, getExpectedHeaders, buildUploadWorkbook, type ParsedFile } from '@/services/fileParser';
+import { parseFile, validateHeaders, getExpectedHeaders, buildUploadWorkbook, normalizeHeader, type ParsedFile } from '@/services/fileParser';
 import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
 import { fuzzySimilarity } from '@/services/fuzzyMatch';
@@ -523,9 +523,8 @@ export default function UploadCenter() {
                 <p className="text-xs font-medium text-muted-foreground mb-2">Detected Headers ({state.parsed.headers.length})</p>
                 <div className="flex flex-wrap gap-1">
                   {state.parsed.headers.map(h => {
-                    const normalize = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/_+$/, '').replace(/^_+/, '');
-                    const expected = getExpectedHeaders(state.uploadType).map(normalize);
-                    const isExpected = expected.includes(normalize(h));
+                    const expected = getExpectedHeaders(state.uploadType).map(normalizeHeader);
+                    const isExpected = expected.includes(normalizeHeader(h));
                     return (
                       <span key={h} className={`text-xs px-2 py-0.5 rounded border font-mono ${isExpected ? 'bg-primary/10 border-primary/30 text-primary' : 'bg-card border-border'}`}>{h}</span>
                     );

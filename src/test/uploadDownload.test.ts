@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import * as XLSX from 'xlsx';
-import { buildUploadWorkbook, getExpectedHeaderSets, parseFile, validateHeaders } from '@/services/fileParser';
+import { buildUploadWorkbook, getExpectedHeaderSets, normalizeHeader, parseFile, validateHeaders } from '@/services/fileParser';
 
 const TYPES = ['Payroll Report', 'Backend Money Report', 'Advance Report', 'Client Data Report', 'Client Email Report', 'Fee Intercept Report'];
 
@@ -21,4 +21,26 @@ describe('buildUploadWorkbook round-trip', () => {
       expect(parsed.rows).toEqual(rows.map(r => Object.fromEntries(parsed.headers.map(h => [h, r[h]]))));
     });
   }
+});
+
+describe('header spelling', () => {
+  const base = getExpectedHeaderSets('Payroll Report')[0].filter(h => !/^(ERO3_FEE|ERO4_FEE|ROYALTY_FEE)$/.test(h));
+  const check = (extra: string[]) =>
+    validateHeaders({ fileName: 'x', headers: [...base, ...extra], rows: [], rowCount: 0, errors: [] }, 'Payroll Report');
+
+  it('accepts ERO3Fee / ERO4Fee / RoyaltyFee and the spaced form', () => {
+    expect(check(['ERO3Fee', 'ERO4Fee', 'RoyaltyFee']).valid).toBe(true);
+    expect(check(['ERO3 Fee', 'ERO4 Fee', 'Royalty Fee']).valid).toBe(true);
+  });
+
+  it('still rejects a different spelling', () => {
+    expect(check(['ERO3 Fees', 'ERO4Fee', 'RoyaltyFee']).missing).toEqual(['ERO3_FEE']);
+  });
+
+  it('no two required headers collapse to the same name', () => {
+    for (const type of TYPES) for (const set of getExpectedHeaderSets(type)) {
+      const norm = set.map(normalizeHeader);
+      expect(new Set(norm).size).toBe(norm.length);
+    }
+  });
 });

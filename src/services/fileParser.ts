@@ -9,7 +9,7 @@ export interface ParsedFile {
 }
 
 // Required headers per report type — matches real file exports
-// Validation normalizes spaces/parens so "Received Tax Prep Fee(s)" matches "RECEIVED_TAX_PREP_FEE_S_"
+// Validation ignores spaces/punctuation (normalizeHeader) so "Received Tax Prep Fee(s)" matches "RECEIVED_TAX_PREP_FEE_S_"
 const PAYROLL_BACKEND_HEADERS = [
   'EFIN', 'PARENT_EFIN', 'GROUP_EFIN', 'PTIN',
   'TAXPAYER_SSN', 'TAXPAYER_LAST_NAME', 'TAXPAYER_FIRST_NAME',
@@ -166,9 +166,13 @@ export async function parseFile(file: File, uploadType?: string): Promise<Parsed
   }
 }
 
-/** Normalize header to uppercase, spaces/parens → underscores for flexible matching */
-function normalizeHeader(h: string): string {
-  return h.toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/_+$/, '').replace(/^_+/, '');
+/**
+ * Normalize a header to uppercase letters/digits only, so spacing and
+ * punctuation don't matter but spelling does: "ERO3Fee", "ERO3 Fee" and
+ * "ERO3_FEE" all match; "ERO3 Fees" doesn't.
+ */
+export function normalizeHeader(h: string): string {
+  return h.toUpperCase().replace(/[^A-Z0-9]/g, '');
 }
 
 export function validateHeaders(parsed: ParsedFile, uploadType: string): { valid: boolean; missing: string[]; extra: string[] } {
