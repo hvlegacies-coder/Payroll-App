@@ -171,11 +171,9 @@ export function SourceRowsPanel({ officeScope, onExportData }: Props) {
       const headRow: any = data.find((o: any) => o.office_name === officeScope);
       const hSet = new Set<string>();
       if (headRow) {
+        // Primary + secondary only: extra EFINs (e.g. D & D 387641) stay out
+        // of Fee Intercept, matching the Summary Table's Fee Intercept fields.
         for (const e of [headRow.primary_efin, headRow.secondary_efin]) {
-          const v = String(e || '').trim();
-          if (v) hSet.add(v);
-        }
-        for (const e of (headRow.extra_efins || []) as string[]) {
           const v = String(e || '').trim();
           if (v) hSet.add(v);
         }
@@ -401,7 +399,7 @@ export function SourceRowsPanel({ officeScope, onExportData }: Props) {
     }
     if (key === 'fee_intercept') {
       // Strict: a row belongs to this office only if its EFIN column is one
-      // of the office's own EFINs (primary/secondary/extra). No downline
+      // of the office's own EFINs (primary/secondary). No downline
       // EFINs and no Parent/Group EFIN matching.
       if (!officeScope || headEfins.size === 0) return [];
       return allRows.filter(r => headEfins.has(String(getVal(r, 'EFIN') || '').trim()));
