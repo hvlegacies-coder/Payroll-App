@@ -21,56 +21,41 @@ const Ctx = createContext<AuthCtx>({
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null);
-  const [role, setRole] = useState<Role>(null);
-  const [loading, setLoading] = useState(true);
+  // undefined = not known yet. Guards must wait for both, or a page refresh
+  // redirects to /login before the saved session (and its role) has loaded.
+  const [session, setSession] = useState<Session | null | undefined>(undefined);
+  const [role, setRole] = useState<Role | undefined>(undefined);
+  const userId = session?.user?.id;
 
   useEffect(() => {
-    // Subscribe synchronously
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
-      setSession(s);
-      if (s?.user) {
-        // Defer DB call out of the auth callback
-        setTimeout(async () => {
-          const { data } = await supabase
-            .from("user_roles")
-            .select("role")
-            .eq("user_id", s.user.id);
-          const roles = (data ?? []).map((r: any) => r.role);
-          setRole(roles.includes("admin") ? "admin" : roles.includes("preparer") ? "preparer" : null);
-        }, 0);
-      } else {
-        setRole(null);
-      }
-    });
-
-    // Then load existing session
-    supabase.auth.getSession().then(({ data: { session: s } }) => {
-      setSession(s);
-      if (!s) setLoading(false);
-    });
-
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => setSession(s));
+    supabase.auth.getSession().then(({ data: { session: s } }) => setSession(s));
     return () => sub.subscription.unsubscribe();
   }, []);
 
+  // Keyed on user id so token refreshes don't refetch the role.
   useEffect(() => {
-    if (session === null) setLoading(false);
-    else if (role !== null || !session?.user) setLoading(false);
-    else {
-      // Resolve role if not yet set after we have a session
-      (async () => {
-        const { data } = await supabase
-          .from("user_roles")
-          .select("role")
-          .eq("user_id", session.user.id);
-        const roles = (data ?? []).map((r: any) => r.role);
-        setRole(
-          roles.includes("admin") ? "admin" : roles.includes("preparer") ? "preparer" : null
-        );
-        setLoading(false);
-      })();
+    if (session === undefined) return;
+    if (!userId) {
+      setRole(null);
+      return;
     }
-  }, [session, role]);
+    setRole(undefined);
+    let cancelled = false;
+    supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId)
+      .then(({ data }) => {
+        if (cancelled) return;
+        const roles = (data ?? []).map((r: any) => r.role);
+        setRole(roles.includes("admin") ? "admin" : roles.includes("preparer") ? "preparer" : null);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, session === undefined]);
 
   const signOut = async () => {
     await supabase.auth.signOut();
@@ -80,8 +65,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {}
   };
 
+  const loading = session === undefined || role === undefined;
+
   return (
-    <Ctx.Provider value={{ session, user: session?.user ?? null, role, loading, signOut }}>
+    <Ctx.Provider value={{ session: session ?? null, user: session?.user ?? null, role: role ?? null, loading, signOut }}>
       {children}
     </Ctx.Provider>
   );
