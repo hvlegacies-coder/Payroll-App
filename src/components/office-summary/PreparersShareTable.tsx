@@ -278,7 +278,7 @@ export function PreparersShareTable({ officeScope, onTotalChange, onExportData }
     }
     return Object.entries(acc)
       .map(([name, total]) => ({ name, total, count: counts[name] || 0, monthCount: months[name]?.size || 0 }))
-      .sort((a, b) => b.total - a.total);
+      .sort((a, b) => a.name.localeCompare(b.name));
   }, [rows, lookups, officeScope, consolidatedOfficeNames]);
 
   const netTotals = useMemo(
