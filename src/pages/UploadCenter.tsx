@@ -34,6 +34,11 @@ async function sha256OfFile(file: File): Promise<string> {
 
 const EXCEL_ACCEPTS = '.csv,.xlsx,.xls,.xlsb,.xlsm';
 
+// Uploads that change preparer earnings: payroll rows, advance flags ($100
+// deduction) and client ownership. Earnings are re-saved when any of these
+// is imported or deleted, so upload order doesn't leave stale earnings.
+const EARNINGS_INPUT_TYPES = ['Payroll Report', 'Advance Report', 'Client Data Report'];
+
 const ALL_UPLOAD_TYPES = [
   { label: 'Payroll Report', displayLabel: 'Disbursement Listing', desc: 'Weekly disbursement listing from Drake — primary source of preparer pay, fees, and net checks issued for the week.', icon: FileText, accept: EXCEL_ACCEPTS, adminOnly: false },
   { label: 'Backend Money Report', desc: 'Backend office report capturing add-on fees, software fees, and net backend money owed back to each office.', icon: DollarSign, accept: EXCEL_ACCEPTS, adminOnly: false },
@@ -296,9 +301,9 @@ export default function UploadCenter() {
       toast.success(`${state.file.name} imported — ${rowsToInsert.length} rows saved${dupMsg}`);
       loadUploads(true);
 
-      // Auto-(re)generate preparer weekly earnings whenever a Payroll Report is imported,
-      // so MyEarnings stays in sync with the latest payroll data for this week.
-      if (state.uploadType === 'Payroll Report') {
+      // Auto-(re)generate preparer weekly earnings whenever an earnings input is
+      // imported, so MyEarnings stays in sync with the latest data for this week.
+      if (EARNINGS_INPUT_TYPES.includes(state.uploadType)) {
         try {
           const result = await generatePreparerWeeklyReports(activeWeek);
           if (result.preparersUpdated > 0) {
@@ -306,7 +311,7 @@ export default function UploadCenter() {
           }
         } catch (err: any) {
           console.error('Preparer earnings auto-generation failed', err);
-          toast.warning(`Payroll imported, but preparer earnings update failed: ${err.message || err}`);
+          toast.warning(`Imported, but preparer earnings update failed: ${err.message || err}`);
         }
       }
 
@@ -327,10 +332,10 @@ export default function UploadCenter() {
       const { error: upErr } = await supabase.from('uploads').delete().eq('id', deleteTarget.id);
       if (upErr) throw upErr;
       toast.success(`${deleteTarget.filename} deleted — re-upload from the cards above to recalculate.`);
-      const wasPayroll = deleteTarget.type === 'Payroll Report';
+      const affectsEarnings = EARNINGS_INPUT_TYPES.includes(deleteTarget.type);
       setDeleteTarget(null);
       await loadUploads();
-      if (wasPayroll && activeWeek) {
+      if (affectsEarnings && activeWeek) {
         try {
           const result = await generatePreparerWeeklyReports(activeWeek);
           if (result.preparersUpdated > 0) {
