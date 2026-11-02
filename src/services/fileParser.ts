@@ -187,3 +187,27 @@ export function validateHeaders(parsed: ParsedFile, uploadType: string): { valid
   }
   return best!;
 }
+/**
+ * Rebuild an upload as a workbook from its saved rows (original files aren't
+ * stored). jsonb doesn't keep column order, so expected headers come first,
+ * then the rest. The header sits on the row parseFile expects, with a title in
+ * the first preamble row (a fully blank preamble is dropped from the sheet
+ * range), so the downloaded file can be re-uploaded as-is.
+ */
+export function buildUploadWorkbook(uploadType: string, title: string, rows: Record<string, unknown>[]): XLSX.WorkBook {
+  const keys = new Set(rows.flatMap(r => Object.keys(r)));
+  const headers: string[] = [];
+  for (const h of getExpectedHeaders(uploadType)) {
+    const k = [...keys].find(k => normalizeHeader(k) === normalizeHeader(h));
+    if (k !== undefined) { headers.push(k); keys.delete(k); }
+  }
+  headers.push(...keys);
+  const aoa = [
+    ...Array.from({ length: getHeaderRowIndex(uploadType) }, (_, i) => (i === 0 ? [title] : [])),
+    headers,
+    ...rows.map(r => headers.map(h => r[h] ?? '')),
+  ];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), 'Sheet1');
+  return wb;
+}

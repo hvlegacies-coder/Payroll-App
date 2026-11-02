@@ -4,10 +4,11 @@ import { StatusBadge } from '@/components/payroll/StatusBadge';
 import { FilterBar } from '@/components/payroll/FilterBar';
 import { DataTable, Column } from '@/components/payroll/DataTable';
 import { Button } from '@/components/ui/button';
-import { Upload, FileText, DollarSign, Users, Mail, Shield, CheckCircle2, AlertTriangle, XCircle, Loader2, Trash2, ShieldCheck } from 'lucide-react';
+import { Upload, FileText, DollarSign, Users, Mail, Shield, CheckCircle2, AlertTriangle, XCircle, Loader2, Trash2, ShieldCheck, Download } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { parseFile, validateHeaders, getExpectedHeaders, type ParsedFile } from '@/services/fileParser';
+import { parseFile, validateHeaders, getExpectedHeaders, buildUploadWorkbook, type ParsedFile } from '@/services/fileParser';
+import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
 import { fuzzySimilarity } from '@/services/fuzzyMatch';
 import { Progress } from '@/components/ui/progress';
@@ -346,6 +347,18 @@ export default function UploadCenter() {
     }
   };
 
+  const handleDownload = async (row: UploadRecord) => {
+    try {
+      const rows = (await fetchUploadRows<{ row_index: number; row_data: Record<string, unknown> }>([row.id], 'row_index, row_data'))
+        .sort((a, b) => a.row_index - b.row_index)
+        .map(r => r.row_data);
+      const wb = buildUploadWorkbook(row.type, `${row.type} - ${row.filename}`, rows);
+      XLSX.writeFile(wb, `${row.filename.replace(/\.[^.]+$/, '')}.xlsx`);
+    } catch (err: any) {
+      toast.error(`Download failed: ${err.message || err}`);
+    }
+  };
+
   const columns: Column<UploadRecord>[] = [
     { key: 'filename', header: 'File Name' },
     { key: 'type', header: 'Type' },
@@ -357,6 +370,17 @@ export default function UploadCenter() {
       key: 'id',
       header: '',
       render: (row) => (
+        <div className="flex">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-8 w-8 p-0"
+          onClick={(e) => { e.stopPropagation(); handleDownload(row); }}
+          aria-label="Download upload"
+          title="Download"
+        >
+          <Download className="h-4 w-4" />
+        </Button>
         <Button
           variant="ghost"
           size="sm"
@@ -366,6 +390,7 @@ export default function UploadCenter() {
         >
           <Trash2 className="h-4 w-4" />
         </Button>
+        </div>
       ),
     },
   ];
