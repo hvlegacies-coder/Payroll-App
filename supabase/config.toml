@@ -1,7 +1,7 @@
 project_id = "csasgyodywfvnycvrbga"
 
 [functions.process-email-queue]
-verify_jwt = true
+verify_jwt = false
 
 [functions.send-transactional-email]
 verify_jwt = true

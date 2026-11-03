@@ -31,7 +31,7 @@ type AppMessage = {
   created_at: string;
 };
 
-const SENDER_FROM = 'payroll@notify.higherviewtaxesllc.com';
+const SENDER_FROM = 'payroll@wagevora.com';
 
 // Ready-made messages tied to a payroll week. Picking one fills Subject and
 // Message, which can still be edited before sending.
@@ -46,7 +46,7 @@ const TEMPLATES: Record<string, { label: string; build: (week: string, note?: st
         `There is no payroll for the payroll week ${week}. No payments will be issued for this week.`,
         ...(note ? ['', `Note: ${note}`] : []),
         '',
-        'Payroll will resume with the next scheduled payroll week. If you have any questions, just reply to this email.',
+        'Payroll will resume with the next scheduled payroll week. If you have any questions, please contact the payroll team.',
         '',
         'Thank you,',
         'Higher View Taxes Payroll',
